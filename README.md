@@ -50,8 +50,8 @@ class MyWidgetState extends State<MyWidget> {
     return isLoading
         ? CircularProgressIndicator()
         : error != null
-        ? Text('Error: $error')
-        : Text('Data: $data');
+          ? Text('Error: $error')
+          : Text('Data: $data');
   }
 }
 ```
@@ -74,7 +74,7 @@ class _MyWidgetState extends State<MyWidget>
     with AsyncOperationMixin<MyData, MyWidget> {
 
   @override
-  Future<MyData> fetch() async => await repository.fetchData();
+  Future<MyData> fetch() => repository.fetchData();
 
   @override
   Widget build(BuildContext context) {
@@ -208,8 +208,8 @@ class ChatPageState extends State<ChatPage>
     return Scaffold(
       body: ValueListenableBuilder(
         valueListenable: operationNotifier,
-        builder: (context, state, _) =>
-          switch (state) {
+        builder: (context, operation, _) =>
+          switch (operation) {
            LoadingOperation() => const CircularProgressIndicator(),
            ErrorOperation(:var message) => ErrorWidget(message: message),
            SuccessOperation(:var data) => MessagesList(messages: data),
@@ -231,8 +231,8 @@ class ChatPageState extends State<ChatPage>
 Widget build(BuildContext context) {
   return ValueListenableBuilder(
     valueListenable: operationNotifier,
-    builder: (context, state, _) =>
-      switch (state) {
+    builder: (context, operation, _) =>
+      switch (operation) {
         LoadingOperation(data: null) => const CircularProgressIndicator(),
         LoadingOperation(:var data?) =>
             Column(

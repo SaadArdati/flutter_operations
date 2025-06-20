@@ -1,6 +1,6 @@
 name: flutter_operations
 description: Type-safe async operation state management for Flutter using sealed classes and exhaustive pattern matching.
-version: 1.0.0
+version: 1.0.1
 homepage: https://github.com/SaadArdati/flutter_operations
 repository: https://github.com/SaadArdati/flutter_operations
 issue_tracker: https://github.com/SaadArdati/flutter_operations/issues
