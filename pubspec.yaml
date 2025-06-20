@@ -1,0 +1,31 @@
+name: flutter_operations
+description: Type-safe async operation state management for Flutter using sealed classes and exhaustive pattern matching.
+version: 1.0.0
+homepage: https://github.com/SaadArdati/flutter_operations
+repository: https://github.com/SaadArdati/flutter_operations
+issue_tracker: https://github.com/SaadArdati/flutter_operations/issues
+documentation: https://pub.dev/documentation/flutter_operations/latest/
+
+topics:
+  - async
+  - state-management
+  - pattern-matching
+  - mixin
+  - operations
+
+screenshots:
+  - description: 'Exhaustive pattern matching with sealed classes'
+    path: screenshots/header.png
+
+environment:
+  sdk: ^3.8.0
+  flutter: ">=3.16.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
