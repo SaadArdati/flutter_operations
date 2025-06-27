@@ -1,9 +1,14 @@
-/// Type-safe async operation state management for Flutter using sealed classes
-/// and exhaustive pattern matching.
+/// Type-safe async & stream state management for Flutter powered by **sealed
+/// classes**, **exhaustive pattern matching**, and **cached data**. No more
+/// juggling `isLoading`, `error`, and `data` fields.
 ///
-/// This library provides mixins for handling loading, success, and error states
-/// with minimal boilerplate while ensuring all possible states are handled
-/// through Dart's exhaustive pattern matching.
+/// Exported mixins
+/// * [AsyncOperationMixin]: For one-shot operations.
+/// * [StreamOperationMixin]: For continuous streams.
+///
+/// Both mixins expose the same four runtime states via [OperationState]:
+/// `IdleOperation`, `LoadingOperation`, `SuccessOperation`, and
+/// `ErrorOperation`.
 library;
 
 export 'src/async_operation_mixin.dart';

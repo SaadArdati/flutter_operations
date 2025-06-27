@@ -6,15 +6,12 @@ import 'operation_state.dart';
 
 /// A mixin that adds asynchronous state management to a [StatefulWidget].
 ///
-/// Handles one-time asynchronous operations with loading, success, and error
-/// states. Unlike [StreamOperationMixin] which handles continuous streams,
-/// this is designed for discrete fetch operations with a clear start and end.
+/// Handles one-time asynchronous operations with **idle**, **loading**,
+/// **success**, and **error** states.
+/// Unlike [StreamOperationMixin], which is intended for infinite data streams, this
+/// mixin is perfect for discrete fetch operations that have a clear start and
+/// end (e.g. HTTP requests, database reads, dialogs).
 ///
-/// Key features:
-/// * Automatic state transitions between loading, success, and error
-/// * Support for cached data during refresh operations
-/// * Race condition prevention through generation tracking
-/// * Optional global widget rebuilds or localized updates
 ///
 /// Example:
 /// ```dart
@@ -106,7 +103,7 @@ mixin AsyncOperationMixin<T, K extends StatefulWidget> on State<K> {
   }
 
   /// Updates the state to loading.
-  void setLoading({bool idle = false, bool cached = true}) {
+  void setLoading({bool cached = true}) {
     final lastData = cached ? operationNotifier.value.data : null;
     final newOp = LoadingOperation<T>(data: lastData);
     if (newOp == operationNotifier.value) {

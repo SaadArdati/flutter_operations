@@ -1,18 +1,28 @@
-/// Represents the state of an asynchronous operation with loading, success,
-/// and error states.
+/// Represents the state of an asynchronous operation.
 ///
-/// This sealed class enables exhaustive pattern matching through Dart's
-/// sealed class feature. The three possible states are:
-/// * [LoadingOperation] - Operation in progress (with optional cached data)
-/// * [SuccessOperation] - Operation completed successfully
-/// * [ErrorOperation] - Operation failed (with optional cached data)
+/// Four runtime variants exist and can be matched exhaustively with Dart 3's
+/// sealed classes:
+/// * **[IdleOperation]**: _Ready_ but **not-loading** state. This only
+///   appears when `loadOnInit / listenOnInit` is set to `false` **or** when
+///   `setIdle()` is called manually. It can still carry cached data.
+/// * **[LoadingOperation]**: Operation in progress (optionally with cached
+///   data). `IdleOperation` extends this class so a single pattern can cover
+///   both cases when the extra distinction is not important.
+/// * **[SuccessOperation]**: Operation finished successfully. Use
+///   `SuccessOperation.empty()` for "successful but no data" scenarios, then
+///   check the `empty` flag.
+/// * **[ErrorOperation]**: Operation failed. Cached data from a previous
+///   success is preserved when available for graceful degradation.
 ///
-/// Example usage:
+/// These variants unlock expressive and compile-time-checked UI code like:
 /// ```dart
 /// switch (state) {
-///   LoadingOperation(data: null) => CircularProgressIndicator(),
-///   SuccessOperation(:var data) => Text(data.toString()),
-///   ErrorOperation(:var message) => ErrorWidget(message: message),
+///   IdleOperation() => const Text('Ready'),
+///   LoadingOperation(data: null) => const CircularProgressIndicator(),
+///   LoadingOperation(:var data?) => Stack(children:[DataView(data), const LinearProgressIndicator()]),
+///   SuccessOperation(:var data) => DataView(data),
+///   ErrorOperation(:var message, data: null) => ErrorBanner(message),
+///   ErrorOperation(:var message, :var data?) => Stack(children:[DataView(data), ErrorBanner(message)]),
 /// }
 /// ```
 sealed class OperationState<T> {
@@ -69,7 +79,9 @@ base class LoadingOperation<T> extends OperationState<T> {
   @override
   bool operator ==(Object other) {
     if (identical(this, other)) return true;
-    return other is LoadingOperation<T> && other.data == data;
+    return other.runtimeType == runtimeType && 
+           other is LoadingOperation<T> && 
+           other.data == data;
   }
 
   @override

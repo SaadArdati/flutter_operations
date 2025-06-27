@@ -8,14 +8,8 @@ import 'operation_state.dart';
 ///
 /// Handles continuous data streams with automatic subscription management,
 /// state transitions, and proper cleanup. Unlike [AsyncOperationMixin] which
-/// handles one-time operations, this is for ongoing streams that emit
-/// multiple values.
-///
-/// Key features:
-/// * Automatic subscription management with cleanup
-/// * Race condition prevention
-/// * Support for cached data during reconnection
-/// * Optional global widget rebuilds
+/// deals with one-off operations, this mixin is built for sources that emit
+/// **multiple** values over time (e.g. WebSockets, database listeners).
 ///
 /// Example:
 /// ```dart
@@ -79,11 +73,24 @@ mixin StreamOperationMixin<T, K extends StatefulWidget> on State<K> {
     }
 
     try {
-      _streamSubscription = stream().listen((value) {
-        if (_generation == currentGeneration) {
-          setData(value);
-        }
-      });
+      _streamSubscription = stream().listen(
+        (value) {
+          if (_generation == currentGeneration) {
+            setData(value);
+          }
+        },
+        onError: (exception, stackTrace) {
+          if (!mounted || _generation != currentGeneration) return;
+
+          setError(
+            exception,
+            stackTrace,
+            message: errorMessage(exception, stackTrace),
+            cached: cached,
+          );
+        },
+        onDone: onDone,
+      );
     } catch (exception, stackTrace) {
       if (!mounted || _generation != currentGeneration) return;
 
@@ -173,8 +180,7 @@ mixin StreamOperationMixin<T, K extends StatefulWidget> on State<K> {
     print(stackTrace);
   }
 
-  /// Called when the state transitions to loading. Override for custom
-  /// handling.
+  /// Called when the state transitions to loading.
   void onLoading() {}
 
   /// Called when the stream emits a new value.
@@ -182,4 +188,7 @@ mixin StreamOperationMixin<T, K extends StatefulWidget> on State<K> {
 
   /// Called when the state transitions to idle.
   void onIdle() {}
+
+  /// Called when the stream completes.
+  void onDone() {}
 }
