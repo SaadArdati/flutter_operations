@@ -48,7 +48,7 @@ mixin AsyncOperationMixin<T, K extends StatefulWidget> on State<K> {
   void initState() {
     super.initState();
     operationNotifier = ValueNotifier<OperationState<T>>(
-      LoadingOperation<T>(idle: !loadOnInit),
+      loadOnInit ? LoadingOperation<T>() : IdleOperation<T>(),
     );
 
     if (loadOnInit) {
@@ -70,13 +70,13 @@ mixin AsyncOperationMixin<T, K extends StatefulWidget> on State<K> {
   /// Handles the complete loading lifecycle with race condition protection.
   FutureOr<void> load({bool cached = true}) async {
     final currentGeneration = ++_generation;
-    setLoading(cached: cached, doesGlobalRefresh: true);
+    setLoading(cached: cached);
 
     try {
       final result = await fetch();
       if (!mounted || _generation != currentGeneration) return;
 
-      setSuccess(result, doesGlobalRefresh: false);
+      setSuccess(result);
     } catch (exception, stackTrace) {
       if (!mounted || _generation != currentGeneration) return;
 
@@ -85,26 +85,30 @@ mixin AsyncOperationMixin<T, K extends StatefulWidget> on State<K> {
         stackTrace,
         message: errorMessage(exception, stackTrace),
         cached: cached,
-        doesGlobalRefresh: false,
       );
-    } finally {
-      if (mounted && globalRefresh && _generation == currentGeneration) {
-        setState(() {});
-      }
     }
   }
 
   /// Convenience method to reload data.
   FutureOr<void> reload({bool cached = true}) => load(cached: cached);
 
-  /// Updates the state to loading.
-  void setLoading({
-    bool idle = false,
-    bool cached = true,
-    bool doesGlobalRefresh = true,
-  }) {
+  void setIdle({bool cached = true}) {
     final lastData = cached ? operationNotifier.value.data : null;
-    final newOp = LoadingOperation<T>(data: lastData, idle: idle);
+    final newOp = IdleOperation<T>(data: lastData);
+    if (newOp == operationNotifier.value) {
+      return;
+    }
+
+    operationNotifier.value = newOp;
+    onIdle();
+
+    if (mounted && globalRefresh) setState(() {});
+  }
+
+  /// Updates the state to loading.
+  void setLoading({bool idle = false, bool cached = true}) {
+    final lastData = cached ? operationNotifier.value.data : null;
+    final newOp = LoadingOperation<T>(data: lastData);
     if (newOp == operationNotifier.value) {
       return;
     }
@@ -112,11 +116,11 @@ mixin AsyncOperationMixin<T, K extends StatefulWidget> on State<K> {
     operationNotifier.value = newOp;
     onLoading();
 
-    if (doesGlobalRefresh && mounted && globalRefresh) setState(() {});
+    if (mounted && globalRefresh) setState(() {});
   }
 
   /// Updates the state to success with the provided data.
-  void setSuccess(T data, {bool doesGlobalRefresh = true}) {
+  void setSuccess(T data) {
     if (operationNotifier.value is SuccessOperation<T> &&
         operationNotifier.value.data == data) {
       return;
@@ -125,7 +129,7 @@ mixin AsyncOperationMixin<T, K extends StatefulWidget> on State<K> {
     operationNotifier.value = SuccessOperation<T>(data: data);
     onSuccess(data);
 
-    if (doesGlobalRefresh && mounted && globalRefresh) setState(() {});
+    if (mounted && globalRefresh) setState(() {});
   }
 
   /// Updates the state to error with the provided exception details.
@@ -134,7 +138,6 @@ mixin AsyncOperationMixin<T, K extends StatefulWidget> on State<K> {
     StackTrace stackTrace, {
     String? message,
     bool cached = true,
-    bool doesGlobalRefresh = true,
   }) {
     final lastData = cached ? operationNotifier.value.data : null;
     final errorOp = ErrorOperation<T>(
@@ -151,7 +154,7 @@ mixin AsyncOperationMixin<T, K extends StatefulWidget> on State<K> {
     operationNotifier.value = errorOp;
     onError(exception, stackTrace, message: message);
 
-    if (doesGlobalRefresh && mounted && globalRefresh) setState(() {});
+    if (mounted && globalRefresh) setState(() {});
   }
 
   /// Converts an exception and stack trace into a human-readable error message.
@@ -171,4 +174,6 @@ mixin AsyncOperationMixin<T, K extends StatefulWidget> on State<K> {
 
   /// Called when the state transitions to loading. Override for custom handling.
   void onLoading() {}
+
+  void onIdle() {}
 }

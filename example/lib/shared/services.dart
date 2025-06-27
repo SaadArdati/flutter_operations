@@ -25,6 +25,31 @@ class MockApiService {
 
     return Product.examples();
   }
+
+  static Future<List<Product>> searchProducts(
+    String query, {
+    bool shouldFail = false,
+  }) async {
+    await Future.delayed(Duration(milliseconds: 600 + _random.nextInt(800)));
+
+    if (shouldFail || _random.nextDouble() < 0.1) {
+      throw Exception('Search failed - network error');
+    }
+
+    if (query.isEmpty) {
+      return [];
+    }
+
+    final allProducts = Product.examples();
+    // Pick a random subset of products to simulate search results
+    final filteredProducts = [
+      for (final product in allProducts)
+        if (_random.nextBool())
+          product
+    ];
+
+    return filteredProducts;
+  }
 }
 
 class MockStreamService {

@@ -40,6 +40,12 @@ class ExampleHome extends StatelessWidget {
             onTap: () => _navigate(context, const BasicAsyncExample()),
           ),
           _ExampleTile(
+            title: 'Search with IdleOperation',
+            description:
+                'Manual loading pattern with IdleOperation - starts idle, loads on demand',
+            onTap: () => _navigate(context, const SearchExample()),
+          ),
+          _ExampleTile(
             title: 'Basic Stream',
             description: 'Simple StreamOperationMixin with real-time updates',
             onTap: () => _navigate(context, const BasicStreamExample()),
@@ -644,5 +650,315 @@ class _AdvancedCustomHandlersExampleState
         ],
       ),
     );
+  }
+}
+
+class SearchExample extends StatefulWidget {
+  const SearchExample({super.key});
+
+  @override
+  State<SearchExample> createState() => _SearchExampleState();
+}
+
+class _SearchExampleState extends State<SearchExample>
+    with AsyncOperationMixin<List<Product>, SearchExample> {
+  @override
+  bool get loadOnInit => false; // Start in IdleOperation - don't auto-load
+
+  final TextEditingController _searchController = TextEditingController();
+  String _currentQuery = '';
+
+  @override
+  Future<List<Product>> fetch() => MockApiService.searchProducts(_currentQuery);
+
+  void _performSearch() {
+    final query = _searchController.text.trim();
+    if (query.isEmpty) {
+      setIdle();
+      return;
+    }
+
+    _currentQuery = query;
+    // Manually trigger loading
+    load();
+  }
+
+  void _clearSearch() {
+    _searchController.clear();
+    _currentQuery = '';
+    setIdle();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Search with IdleOperation')),
+      body: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            // Search input section
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Search Products',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'This example demonstrates IdleOperation - the widget starts idle and only loads when you search.',
+                      style: TextStyle(color: Colors.grey),
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: _searchController,
+                            decoration: const InputDecoration(
+                              hintText: 'Enter product name...',
+                              border: OutlineInputBorder(),
+                              prefixIcon: Icon(Icons.search),
+                            ),
+                            onSubmitted: (_) => _performSearch(),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        ElevatedButton(
+                          onPressed: _performSearch,
+                          child: const Text('Search'),
+                        ),
+                        const SizedBox(width: 8),
+                        OutlinedButton(
+                          onPressed: _clearSearch,
+                          child: const Text('Clear'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 16),
+
+            // State indicator
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.blue.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.blue.shade200),
+              ),
+              child: Text(
+                'Current State: ${switch (operation) {
+                  IdleOperation(data: null) => 'IdleOperation (no data) - Ready to search',
+                  IdleOperation(data: _) => 'IdleOperation (with cached data) - Showing previous results',
+                  LoadingOperation(data: null) => 'LoadingOperation (no data) - Searching...',
+                  LoadingOperation(data: _) => 'LoadingOperation (with cached data) - Searching with cached results shown',
+                  SuccessOperation(data: _) => 'SuccessOperation - Search completed successfully',
+                  ErrorOperation(data: null) => 'ErrorOperation (no data) - Search failed',
+                  ErrorOperation(data: _) => 'ErrorOperation (with cached data) - Search failed, showing cached results',
+                }}',
+                style: TextStyle(
+                  fontWeight: FontWeight.w500,
+                  color: Colors.blue.shade700,
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 16),
+
+            // Results section
+            Expanded(
+              child: ValueListenableBuilder<OperationState<List<Product>>>(
+                valueListenable: operationNotifier,
+                builder: (context, operation, _) => switch (operation) {
+                  // IdleOperation - only appears because loadOnInit = false
+                  IdleOperation(data: null) => const Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.search_off, size: 64, color: Colors.grey),
+                        SizedBox(height: 16),
+                        Text(
+                          'Ready to Search',
+                          style: TextStyle(
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.grey,
+                          ),
+                        ),
+                        SizedBox(height: 8),
+                        Text(
+                          'Enter a search term and press Search to begin',
+                          style: TextStyle(color: Colors.grey),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  // IdleOperation with cached data from previous search
+                  IdleOperation(:var data?) => Column(
+                    children: [
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.orange.shade50,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.orange.shade200),
+                        ),
+                        child: Text(
+                          'Showing cached results for previous search. Enter new search term to search again.',
+                          style: TextStyle(color: Colors.orange.shade700),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Expanded(
+                        child: GridView.builder(
+                          gridDelegate:
+                              const SliverGridDelegateWithMaxCrossAxisExtent(
+                                maxCrossAxisExtent: 200,
+                              ),
+                          itemCount: data.length,
+                          itemBuilder: (context, index) => ProductCard(
+                            product: data[index],
+                            isStale: true, // Indicate this is cached data
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  LoadingOperation(data: null) => const LoadingStateWidget(
+                    message: 'Searching products...',
+                  ),
+
+                  LoadingOperation(:var data?) => Column(
+                    children: [
+                      const LoadingStateWidget(
+                        message: 'Searching...',
+                        showLinearProgress: true,
+                      ),
+                      const SizedBox(height: 16),
+                      Expanded(
+                        child: GridView.builder(
+                          gridDelegate:
+                              const SliverGridDelegateWithMaxCrossAxisExtent(
+                                maxCrossAxisExtent: 200,
+                              ),
+                          itemCount: data.length,
+                          itemBuilder: (context, index) =>
+                              ProductCard(product: data[index], isStale: true),
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  SuccessOperation(:var data) when data.isEmpty => const Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.search_off, size: 64, color: Colors.grey),
+                        SizedBox(height: 16),
+                        Text(
+                          'No Results Found',
+                          style: TextStyle(
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.grey,
+                          ),
+                        ),
+                        SizedBox(height: 8),
+                        Text(
+                          'Try a different search term',
+                          style: TextStyle(color: Colors.grey),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  SuccessOperation(:var data) => Column(
+                    children: [
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.green.shade50,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.green.shade200),
+                        ),
+                        child: Text(
+                          'Found ${data.length} product${data.length != 1 ? 's' : ''} for "$_currentQuery"',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w500,
+                            color: Colors.green.shade700,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Expanded(
+                        child: GridView.builder(
+                          gridDelegate:
+                              const SliverGridDelegateWithMaxCrossAxisExtent(
+                                maxCrossAxisExtent: 200,
+                              ),
+                          itemCount: data.length,
+                          itemBuilder: (context, index) =>
+                              ProductCard(product: data[index]),
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  ErrorOperation(:var message, data: null) => ErrorStateWidget(
+                    title: 'Search Failed',
+                    message: message ?? 'Failed to search products',
+                    onRetry: () => _performSearch(),
+                  ),
+
+                  ErrorOperation(:var message, :var data?) => Column(
+                    children: [
+                      ErrorStateWidget(
+                        message: message ?? 'Search failed',
+                        onRetry: () => _performSearch(),
+                        showAsWarning: true,
+                      ),
+                      const SizedBox(height: 16),
+                      Expanded(
+                        child: GridView.builder(
+                          gridDelegate:
+                              const SliverGridDelegateWithMaxCrossAxisExtent(
+                                maxCrossAxisExtent: 200,
+                              ),
+                          itemCount: data.length,
+                          itemBuilder: (context, index) =>
+                              ProductCard(product: data[index], isStale: true),
+                        ),
+                      ),
+                    ],
+                  ),
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
   }
 }

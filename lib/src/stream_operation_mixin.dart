@@ -50,7 +50,7 @@ mixin StreamOperationMixin<T, K extends StatefulWidget> on State<K> {
   void initState() {
     super.initState();
     operationNotifier = ValueNotifier<OperationState<T>>(
-      LoadingOperation<T>(idle: !listenOnInit),
+      listenOnInit ? LoadingOperation<T>() : IdleOperation<T>(),
     );
 
     if (listenOnInit) {
@@ -72,15 +72,8 @@ mixin StreamOperationMixin<T, K extends StatefulWidget> on State<K> {
   /// Cancels existing subscription and creates a new one.
   void listen({bool cached = true}) {
     final currentGeneration = ++_generation;
-    final lastData = cached ? operationNotifier.value.data : null;
-    final newOp = LoadingOperation<T>(data: lastData, idle: false);
-    if (newOp != operationNotifier.value) {
-      if (_generation != currentGeneration) return;
-      operationNotifier.value = newOp;
-      if (mounted && globalRefresh) setState(() {});
-    }
+    setLoading(cached: cached);
 
-    // Cancel previous subscription asynchronously but don't wait
     if (_streamSubscription != null) {
       _streamSubscription!.cancel();
     }
@@ -88,7 +81,7 @@ mixin StreamOperationMixin<T, K extends StatefulWidget> on State<K> {
     try {
       _streamSubscription = stream().listen((value) {
         if (_generation == currentGeneration) {
-          setData(value, doesGlobalRefresh: true);
+          setData(value);
         }
       });
     } catch (exception, stackTrace) {
@@ -99,23 +92,27 @@ mixin StreamOperationMixin<T, K extends StatefulWidget> on State<K> {
         stackTrace,
         message: errorMessage(exception, stackTrace),
         cached: cached,
-        doesGlobalRefresh: true,
       );
-    }
-
-    if (mounted && globalRefresh && _generation == currentGeneration) {
-      setState(() {});
     }
   }
 
-  /// Updates the state to loading.
-  void setLoading({
-    bool idle = false,
-    bool cached = true,
-    bool doesGlobalRefresh = true,
-  }) {
+  void setIdle({bool cached = true}) {
     final lastData = cached ? operationNotifier.value.data : null;
-    final newOp = LoadingOperation<T>(data: lastData, idle: idle);
+    final newOp = IdleOperation<T>(data: lastData);
+    if (newOp == operationNotifier.value) {
+      return;
+    }
+
+    operationNotifier.value = newOp;
+    onIdle();
+
+    if (mounted && globalRefresh) setState(() {});
+  }
+
+  /// Updates the state to loading.
+  void setLoading({bool idle = false, bool cached = true}) {
+    final lastData = cached ? operationNotifier.value.data : null;
+    final newOp = LoadingOperation<T>(data: lastData);
     if (newOp == operationNotifier.value) {
       return;
     }
@@ -123,11 +120,11 @@ mixin StreamOperationMixin<T, K extends StatefulWidget> on State<K> {
     operationNotifier.value = newOp;
     onLoading();
 
-    if (doesGlobalRefresh && mounted && globalRefresh) setState(() {});
+    if (mounted && globalRefresh) setState(() {});
   }
 
   /// Updates the state to success with the provided data.
-  void setData(T data, {bool doesGlobalRefresh = true}) {
+  void setData(T data) {
     if (operationNotifier.value is SuccessOperation<T> &&
         operationNotifier.value.data == data) {
       return;
@@ -136,7 +133,7 @@ mixin StreamOperationMixin<T, K extends StatefulWidget> on State<K> {
     operationNotifier.value = SuccessOperation<T>(data: data);
     onData(data);
 
-    if (doesGlobalRefresh && mounted && globalRefresh) setState(() {});
+    if (mounted && globalRefresh) setState(() {});
   }
 
   /// Updates the state to error with the provided exception details.
@@ -145,7 +142,6 @@ mixin StreamOperationMixin<T, K extends StatefulWidget> on State<K> {
     StackTrace stackTrace, {
     String? message,
     bool cached = true,
-    bool doesGlobalRefresh = true,
   }) {
     final lastData = cached ? operationNotifier.value.data : null;
     final errorOp = ErrorOperation<T>(
@@ -162,7 +158,7 @@ mixin StreamOperationMixin<T, K extends StatefulWidget> on State<K> {
     operationNotifier.value = errorOp;
     onError(exception, stackTrace, message: message);
 
-    if (doesGlobalRefresh && mounted && globalRefresh) setState(() {});
+    if (mounted && globalRefresh) setState(() {});
   }
 
   /// Converts an exception and stack trace into a human-readable error message.
@@ -177,9 +173,13 @@ mixin StreamOperationMixin<T, K extends StatefulWidget> on State<K> {
     print(stackTrace);
   }
 
-  /// Called when the state transitions to loading. Override for custom handling.
+  /// Called when the state transitions to loading. Override for custom
+  /// handling.
   void onLoading() {}
 
   /// Called when the stream emits a new value.
   void onData(T value) {}
+
+  /// Called when the state transitions to idle.
+  void onIdle() {}
 }

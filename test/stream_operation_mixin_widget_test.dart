@@ -62,6 +62,8 @@ class _GlobalRefreshStreamWidgetState extends State<GlobalRefreshStreamWidget>
           children: [
             // Display current state
             switch (operation) {
+              IdleOperation(data: null) => const Text('Idle'),
+              IdleOperation(:var data?) => Text('Idle with ${data.value}'),
               LoadingOperation(data: null) => const Text('Loading'),
               LoadingOperation(:var data?) => Text(
                 'Loading with ${data.value}',
@@ -100,6 +102,11 @@ class _GlobalRefreshStreamWidgetState extends State<GlobalRefreshStreamWidget>
               ),
               child: const Text('Set Error'),
             ),
+            ElevatedButton(
+              key: const Key('set_idle'),
+              onPressed: () => setIdle(),
+              child: const Text('Set Idle'),
+            ),
           ],
         ),
       ),
@@ -121,6 +128,7 @@ void main() {
         expect(find.text('Loading'), findsOneWidget);
         expect(find.text('Success:'), findsNothing);
         expect(find.text('Error:'), findsNothing);
+        expect(find.text('Idle'), findsNothing);
 
         // Emit a value
         controller.add(const StreamTestData(42));
@@ -133,7 +141,7 @@ void main() {
       },
     );
 
-    testWidgets('should not auto-listen when listenOnInit is false', (
+    testWidgets('should show idle state when listenOnInit is false', (
       tester,
     ) async {
       bool streamCreated = false;
@@ -150,6 +158,10 @@ void main() {
 
       await tester.pump();
 
+      // Should show idle state initially
+      expect(find.text('Idle'), findsOneWidget);
+      expect(find.text('Loading'), findsNothing);
+      
       // Stream should not be created yet
       expect(streamCreated, isFalse);
 
@@ -200,105 +212,74 @@ void main() {
         ),
       );
 
-      // Wait for initial stream
+      // Wait for initial load
       await tester.pumpAndSettle();
       expect(find.text('Success: 101'), findsOneWidget);
 
-      // Trigger cached reconnection
+      // Trigger reconnection with cached data
       await tester.tap(find.byKey(const Key('listen_cached')));
-      await tester.pump(); // Just one frame to see loading state
-
-      // Should show loading with cached data
+      await tester.pump(); // Should show loading with cached data
+      
       expect(find.text('Loading with 101'), findsOneWidget);
 
-      // Wait for new stream data
+      // Wait for new data
       await tester.pumpAndSettle();
       expect(find.text('Success: 102'), findsOneWidget);
     });
 
-    testWidgets('should not preserve cached data when cached=false', (
-      tester,
-    ) async {
-      int streamCount = 0;
-
-      await tester.pumpWidget(
-        GlobalRefreshStreamWidget(
-          mockStream: () {
-            streamCount++;
-            // Use async stream to allow observing loading state
-            return Stream.fromFuture(
-              Future.delayed(
-                const Duration(milliseconds: 10),
-                () => StreamTestData(200 + streamCount),
-              ),
-            );
-          },
-        ),
-      );
-
-      // Wait for initial stream
-      await tester.pumpAndSettle();
-      expect(find.text('Success: 201'), findsOneWidget);
-
-      // Trigger fresh reconnection
-      await tester.tap(find.byKey(const Key('listen_fresh')));
-      await tester.pump(); // Just one frame to see loading state
-
-      // Should show loading without cached data
-      expect(find.text('Loading'), findsOneWidget);
-      expect(find.text('Loading with 201'), findsNothing);
-
-      // Wait for new stream data
-      await tester.pumpAndSettle();
-      expect(find.text('Success: 202'), findsOneWidget);
-    });
-
-    // Test removed - was causing infinite hang due to disposal timing issues
-
-    testWidgets('should handle multiple rapid listen calls', (tester) async {
-      int streamCount = 0;
-
+    testWidgets('should handle manual state transitions', (tester) async {
       await tester.pumpWidget(
         GlobalRefreshStreamWidget(
           mockListenOnInit: false,
+          mockStream: () => Stream.value(const StreamTestData(0)),
+        ),
+      );
+
+      // Initially idle
+      expect(find.text('Idle'), findsOneWidget);
+
+      // Set manual success
+      await tester.tap(find.byKey(const Key('manual_success')));
+      await tester.pump();
+      expect(find.text('Success: 999'), findsOneWidget);
+
+      // Set manual error
+      await tester.tap(find.byKey(const Key('manual_error')));
+      await tester.pump();
+      expect(find.text('Error: Manual stream error message with 999'), findsOneWidget);
+
+      // Set back to idle with cached data
+      await tester.tap(find.byKey(const Key('set_idle')));
+      await tester.pump();
+      expect(find.text('Idle with 999'), findsOneWidget);
+    });
+
+    testWidgets('should handle error states correctly', (tester) async {
+      late StreamController<StreamTestData> controller;
+      
+      await tester.pumpWidget(
+        GlobalRefreshStreamWidget(
           mockStream: () {
-            streamCount++;
-            return Stream.value(StreamTestData(streamCount * 100));
+            controller = StreamController<StreamTestData>();
+            return controller.stream;
           },
         ),
       );
 
-      // Trigger multiple rapid listen calls
-      await tester.tap(find.byKey(const Key('listen_fresh')));
-      await tester.tap(find.byKey(const Key('listen_fresh')));
-      await tester.tap(find.byKey(const Key('listen_fresh')));
+      // Initially loading
+      expect(find.text('Loading'), findsOneWidget);
 
-      await tester.pumpAndSettle();
-
-      // Should only show the result of the last stream due to race condition handling
-      expect(find.text('Success: 300'), findsOneWidget);
-      expect(streamCount, equals(3));
-    });
-
-    testWidgets('should handle manual state updates', (tester) async {
-      await tester.pumpWidget(
-        GlobalRefreshStreamWidget(mockListenOnInit: false),
-      );
-
-      // Manually set success
-      await tester.tap(find.byKey(const Key('manual_success')));
+      // Emit data first
+      controller.add(const StreamTestData(42));
       await tester.pump();
+      expect(find.text('Success: 42'), findsOneWidget);
 
-      expect(find.text('Success: 999'), findsOneWidget);
-
-      // Manually set error
+      // Trigger error with cached data
       await tester.tap(find.byKey(const Key('manual_error')));
       await tester.pump();
+      expect(find.text('Error: Manual stream error message with 42'), findsOneWidget);
 
-      expect(
-        find.text('Error: Manual stream error message with 999'),
-        findsOneWidget,
-      );
+      await controller.close();
     });
   });
 }

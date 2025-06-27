@@ -178,12 +178,14 @@ class ProductCard extends StatelessWidget {
   final Product product;
   final VoidCallback? onTap;
   final VoidCallback? onAddToCart;
+  final bool isStale;
 
   const ProductCard({
     super.key,
     required this.product,
     this.onTap,
     this.onAddToCart,
+    this.isStale = false,
   });
 
   @override
@@ -192,47 +194,74 @@ class ProductCard extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                product.name,
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
+        child: Stack(
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    product.name,
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: isStale ? Colors.grey : null,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    '\$${product.price.toStringAsFixed(2)}',
+                    style: TextStyle(
+                      fontSize: 16,
+                      color: isStale ? Colors.grey : Colors.green,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Stock: ${product.stock}',
+                    style: TextStyle(
+                      color: isStale 
+                        ? Colors.grey[400]
+                        : (product.stock > 0 ? Colors.grey[600] : Colors.red),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  if (onAddToCart != null)
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: (product.stock > 0 && !isStale) ? onAddToCart : null,
+                        child: Text(
+                          product.stock > 0 ? 'Add to Cart' : 'Out of Stock',
+                        ),
+                      ),
+                    ),
+                ],
               ),
-              const SizedBox(height: 8),
-              Text(
-                '\$${product.price.toStringAsFixed(2)}',
-                style: const TextStyle(
-                  fontSize: 16,
-                  color: Colors.green,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'Stock: ${product.stock}',
-                style: TextStyle(
-                  color: product.stock > 0 ? Colors.grey[600] : Colors.red,
-                ),
-              ),
-              const SizedBox(height: 8),
-              if (onAddToCart != null)
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    onPressed: product.stock > 0 ? onAddToCart : null,
-                    child: Text(
-                      product.stock > 0 ? 'Add to Cart' : 'Out of Stock',
+            ),
+            if (isStale)
+              Positioned(
+                top: 8,
+                right: 8,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: Colors.orange,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Text(
+                    'Cached',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
                 ),
-            ],
-          ),
+              ),
+          ],
         ),
       ),
     );
