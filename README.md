@@ -342,6 +342,77 @@ void fn() {
 }
 ```
 
+### Using Success Messages
+
+The `SuccessOperation` includes an optional `message` field that can be used to display server confirmation messages or
+other success-related information. To include a message, override `fetchWithMessage()` instead of `fetch()`:
+
+```dart
+class MyState extends State<MyWidget>
+    with AsyncOperationMixin<MyData, MyWidget> {
+  
+  @override
+  Future<OperationResult<MyData>> fetchWithMessage() async {
+    // Simulating an API response that includes both data and message
+    final response = await http.get(Uri.parse('https://api.example.com/data'));
+    final json = jsonDecode(response.body);
+    
+    // Extract and decode the data
+    final data = MyData.fromJson(json['data']);
+    
+    // Extract the message from the server response
+    final message = json['message'] as String?;
+    
+    return OperationResult(data, message: message);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return switch (operation) {
+      // Access message in pattern matching
+      SuccessOperation(:var data, :var message?) => Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            color: Colors.green.shade50,
+            child: Text(message),
+          ),
+          DataWidget(data),
+        ],
+      ),
+      // ... other cases
+    };
+  }
+}
+```
+
+**Important:** You must override exactly one of `fetch()` or `fetchWithMessage()`, but not both. Use `fetch()` for
+simple cases without messages, or `fetchWithMessage()` when you need a success message.
+
+You can also access the message directly:
+
+```dart
+if (operation case SuccessOperation(:final message?)) {
+ScaffoldMessenger.of(context).showSnackBar(
+SnackBar(content: Text(message)),
+);
+}
+```
+
+For streams, use `streamWithMessage()` similarly:
+
+```dart
+@override
+Stream<OperationResult<Message>> streamWithMessage() {
+  return messageStream.map((jsonMap) {
+    // Assuming the stream emits Maps with 'data' and 'message' fields
+    final data = Message.fromJson(jsonMap['data']);
+    final message = jsonMap['message'] as String?;
+    return OperationResult(data, message: message);
+  });
+}
+```
+
 ### Managing Idle States
 
 Use `setIdle()` to put operations in a ready-but-not-loading state:
@@ -495,6 +566,8 @@ loading scenarios:
 - Represents a completed operation with data.
 - Data is guaranteed to be available and type-safe.
 - Supports empty success states with `SuccessOperation.empty()`.
+- Includes an optional `message` field for success-related information (e.g., server confirmation messages separate from
+  the main data payload).
 
 ### `ErrorOperation<T>`
 

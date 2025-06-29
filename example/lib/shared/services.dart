@@ -16,6 +16,28 @@ class MockApiService {
     return User.example();
   }
 
+  /// Simulates an API response that includes both data and message fields
+  static Future<Map<String, dynamic>> fetchUserWithMessage({
+    bool shouldFail = false,
+  }) async {
+    await Future.delayed(Duration(milliseconds: 800 + _random.nextInt(1200)));
+
+    if (shouldFail || _random.nextDouble() < 0.2) {
+      throw Exception('Failed to load user data');
+    }
+
+    final user = User.example();
+    return {
+      'data': {
+        'name': user.name,
+        'email': user.email,
+        'avatarUrl': user.avatarUrl,
+      },
+      'message':
+          'Welcome back, ${user.name}! Your profile has been loaded successfully.',
+    };
+  }
+
   static Future<List<Product>> fetchProducts({bool shouldFail = false}) async {
     await Future.delayed(Duration(milliseconds: 1000 + _random.nextInt(1000)));
 

@@ -2,7 +2,20 @@ import 'dart:async';
 
 import 'package:flutter/widgets.dart';
 
+import 'operation_result.dart';
 import 'operation_state.dart';
+
+/// Internal exception used to detect when fetch/fetchWithMessage methods
+///  are not overridden.
+class _NotImplementedException implements Exception {
+  final String methodName;
+
+  const _NotImplementedException(this.methodName);
+
+  @override
+  String toString() =>
+      'AsyncOperationMixinException: $methodName not implemented';
+}
 
 /// A mixin that adds asynchronous state management to a [StatefulWidget].
 ///
@@ -60,8 +73,43 @@ mixin AsyncOperationMixin<T, K extends StatefulWidget> on State<K> {
   }
 
   /// Fetches the data for this widget.
-  /// Must be implemented to define how to retrieve data.
-  FutureOr<T> fetch();
+  ///
+  /// You must override either this method OR [fetchWithMessage], but not both.
+  ///
+  /// This method is for simple cases where you only need to return data.
+  /// For cases where you want to include a success message, override
+  /// [fetchWithMessage] instead.
+  ///
+  /// Default implementation throws to indicate it must be overridden.
+  FutureOr<T> fetch() => throw const _NotImplementedException('fetch');
+
+  /// Fetches the data with an optional success message.
+  ///
+  /// You must override either this method OR [fetch], but not both.
+  ///
+  /// Default implementation throws to indicate it must be overridden.
+  /// When overridden, return an [OperationResult] containing the data
+  /// and optional message.
+  ///
+  /// Example:
+  /// ```dart
+  /// @override
+  /// Future<OperationResult<User>> fetchWithMessage() async {
+  ///   // API returns a Map with 'data' and 'message' fields
+  ///   final response = await http.get(Uri.parse('https://api.example.com/user'));
+  ///   final json = jsonDecode(response.body);
+  ///
+  ///   // Decode the data
+  ///   final user = User.fromJson(json['data']);
+  ///
+  ///   // Extract the message from server response
+  ///   final message = json['message'] as String?;
+  ///
+  ///   return OperationResult(user, message: message);
+  /// }
+  /// ```
+  FutureOr<OperationResult<T>> fetchWithMessage() =>
+      throw const _NotImplementedException('fetchWithMessage');
 
   /// Loads data and updates the operation state accordingly.
   /// Handles the complete loading lifecycle with race condition protection.
@@ -70,12 +118,55 @@ mixin AsyncOperationMixin<T, K extends StatefulWidget> on State<K> {
     setLoading(cached: cached);
 
     try {
+      // Try fetchWithMessage() first
+      OperationResult<T>? resultWithMessage;
+      try {
+        resultWithMessage = await fetchWithMessage();
+      } on _NotImplementedException {
+        // fetchWithMessage not overridden, try fetch()
+      }
+
+      if (resultWithMessage != null) {
+        // fetchWithMessage() was overridden, validate fetch() is not
+        try {
+          await fetch();
+          // If we get here, fetch() was also overridden (didn't throw)
+          throw StateError(
+            'Both fetch() and fetchWithMessage() are overridden. '
+            'You must override exactly one of them.',
+          );
+        } on _NotImplementedException {
+          // fetch() was not overridden, use fetchWithMessage result
+          if (!mounted || _generation != currentGeneration) return;
+          setSuccess(
+            resultWithMessage.data,
+            message: resultWithMessage.message,
+          );
+          return;
+        }
+      }
+
+      // fetchWithMessage() was not overridden, use fetch()
       final result = await fetch();
       if (!mounted || _generation != currentGeneration) return;
 
       setSuccess(result);
     } catch (exception, stackTrace) {
       if (!mounted || _generation != currentGeneration) return;
+
+      // Check if neither method was overridden
+      if (exception is _NotImplementedException) {
+        throw StateError(
+          'Neither fetch() nor fetchWithMessage() are overridden. '
+          'You must override exactly one of them.',
+        );
+      }
+
+      // Don't report our internal exception as an error
+      if (exception is StateError) {
+        // Re-throw StateError (from validation)
+        rethrow;
+      }
 
       setError(
         exception,
@@ -117,13 +208,15 @@ mixin AsyncOperationMixin<T, K extends StatefulWidget> on State<K> {
   }
 
   /// Updates the state to success with the provided data.
-  void setSuccess(T data) {
-    if (operationNotifier.value is SuccessOperation<T> &&
-        operationNotifier.value.data == data) {
+  void setSuccess(T data, {String? message}) {
+    if (operationNotifier.value case SuccessOperation(
+      data: final oldData,
+      message: final oldMessage,
+    ) when oldData == data && oldMessage == message) {
       return;
     }
 
-    operationNotifier.value = SuccessOperation<T>(data: data);
+    operationNotifier.value = SuccessOperation<T>(data: data, message: message);
     onSuccess(data);
 
     if (mounted && globalRefresh) setState(() {});

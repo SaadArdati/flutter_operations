@@ -91,6 +91,8 @@ base class LoadingOperation<T> extends OperationState<T> {
   String toString() => 'LoadingOperation(data: $data)';
 }
 
+/// Represents an idle operation that is ready but not currently loading.
+/// Can optionally carry cached data from a previous successful operation.
 final class IdleOperation<T> extends LoadingOperation<T> {
   /// Creates an idle loading state with optional cached data.
   const IdleOperation({super.data});
@@ -103,14 +105,21 @@ final class IdleOperation<T> extends LoadingOperation<T> {
 /// The data is guaranteed to be non-null in this state.
 final class SuccessOperation<T> extends OperationState<T> {
   /// Creates a success state with the operation's result data.
-  const SuccessOperation({required T super.data}) : empty = data == null;
+  const SuccessOperation({required T super.data, this.message})
+    : empty = data == null;
 
   /// Creates an empty success state, indicating the operation completed
   /// successfully but returned no data.
-  const SuccessOperation.empty() : empty = true;
+  const SuccessOperation.empty({super.data, this.message})
+    : empty = data == null;
 
   /// Whether the operation completed successfully but returned no data.
   final bool empty;
+
+  /// An optional message associated with the successful operation.
+  /// An example would be a server sending a success confirmation with
+  /// specific details in the message, separate from the main data payload.
+  final String? message;
 
   /// The data associated with the successful operation.
   @override
@@ -130,14 +139,16 @@ final class SuccessOperation<T> extends OperationState<T> {
     if (identical(this, other)) return true;
     return other is SuccessOperation<T> &&
         other.data == data &&
+        other.message == message &&
         other.empty == empty;
   }
 
   @override
-  int get hashCode => data.hashCode ^ empty.hashCode;
+  int get hashCode => data.hashCode ^ message.hashCode ^ empty.hashCode;
 
   @override
-  String toString() => 'SuccessOperation(data: $data, empty: $empty)';
+  String toString() =>
+      'SuccessOperation(data: $data, message: $message, empty: $empty)';
 }
 
 /// Represents a failed operation with error details.

@@ -9,6 +9,12 @@ class User {
 
   static User example() =>
       const User(name: 'John Doe', email: 'john@example.com', avatarUrl: null);
+
+  factory User.fromJson(Map<String, dynamic> json) => User(
+    name: json['name'] as String,
+    email: json['email'] as String,
+    avatarUrl: json['avatarUrl'] as String?,
+  );
 }
 
 class Product {

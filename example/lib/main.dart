@@ -106,7 +106,18 @@ class BasicAsyncExample extends StatefulWidget {
 class _BasicAsyncExampleState extends State<BasicAsyncExample>
     with AsyncOperationMixin<User, BasicAsyncExample> {
   @override
-  Future<User> fetch() => MockApiService.fetchUser();
+  Future<OperationResult<User>> fetchWithMessage() async {
+    // Simulating an API response with both data and message fields
+    final response = await MockApiService.fetchUserWithMessage();
+
+    // Extract and decode the data
+    final user = User.fromJson(response['data']);
+
+    // Extract the message from the server response
+    final message = response['message'] as String?;
+
+    return OperationResult(user, message: message);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -132,8 +143,38 @@ class _BasicAsyncExampleState extends State<BasicAsyncExample>
               ],
             ),
 
-            SuccessOperation(:var data) => Column(
+            SuccessOperation(:var data, :var message) => Column(
               children: [
+                if (message != null)
+                  Container(
+                    width: double.infinity,
+                    margin: const EdgeInsets.only(bottom: 16),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.green.shade50,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.green.shade200),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.check_circle,
+                          color: Colors.green,
+                          size: 20,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            message,
+                            style: TextStyle(
+                              color: Colors.green.shade700,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 Expanded(child: UserCard(user: data)),
                 const SizedBox(height: 16),
                 Row(
