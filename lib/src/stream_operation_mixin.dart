@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/widgets.dart';
 
-import 'operation_result.dart';
 import 'operation_state.dart';
 
 /// Internal exception used to detect when stream/streamWithMessage methods
@@ -89,22 +88,22 @@ mixin StreamOperationMixin<T, K extends StatefulWidget> on State<K> {
   /// You must override either this method OR [stream], but not both.
   ///
   /// Default implementation throws to indicate it must be overridden.
-  /// When overridden, return a stream of [OperationResult] objects containing
-  ///  data and optional messages.
+  /// When overridden, return a stream of records `(T, String?)` containing
+  /// data and optional messages.
   ///
   /// Example:
   /// ```dart
   /// @override
-  /// Stream<OperationResult<User>> streamWithMessage() {
+  /// Stream<(User, String?)> streamWithMessage() {
   ///   return userStream.map((jsonMap) {
   ///     // Stream emits Maps with 'data' and 'message' fields
   ///     final user = User.fromJson(jsonMap['data']);
   ///     final message = jsonMap['message'] as String?;
-  ///     return OperationResult(user, message: message);
+  ///     return (user, message);
   ///   });
   /// }
   /// ```
-  Stream<OperationResult<T>> streamWithMessage() =>
+  Stream<(T, String?)> streamWithMessage() =>
       throw const _NotImplementedException('streamWithMessage');
 
   /// Starts listening to the stream and manages subscription lifecycle.
@@ -118,7 +117,7 @@ mixin StreamOperationMixin<T, K extends StatefulWidget> on State<K> {
 
     try {
       // Try streamWithMessage() first
-      Stream<OperationResult<T>>? streamWithMsg;
+      Stream<(T, String?)>? streamWithMsg;
       try {
         streamWithMsg = streamWithMessage();
       } on _NotImplementedException {
@@ -140,7 +139,7 @@ mixin StreamOperationMixin<T, K extends StatefulWidget> on State<K> {
           _streamSubscription = streamWithMsg.listen(
             (result) {
               if (_generation == currentGeneration) {
-                setData(result.data, message: result.message);
+                setData(result.$1, message: result.$2);
               }
             },
             onError: (exception, stackTrace) {

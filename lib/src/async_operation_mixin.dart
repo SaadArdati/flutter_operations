@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/widgets.dart';
 
-import 'operation_result.dart';
 import 'operation_state.dart';
 
 /// Internal exception used to detect when fetch/fetchWithMessage methods
@@ -88,13 +87,13 @@ mixin AsyncOperationMixin<T, K extends StatefulWidget> on State<K> {
   /// You must override either this method OR [fetch], but not both.
   ///
   /// Default implementation throws to indicate it must be overridden.
-  /// When overridden, return an [OperationResult] containing the data
+  /// When overridden, return a record `(T, String?)` containing the data
   /// and optional message.
   ///
   /// Example:
   /// ```dart
   /// @override
-  /// Future<OperationResult<User>> fetchWithMessage() async {
+  /// Future<(User, String?)> fetchWithMessage() async {
   ///   // API returns a Map with 'data' and 'message' fields
   ///   final response = await http.get(Uri.parse('https://api.example.com/user'));
   ///   final json = jsonDecode(response.body);
@@ -105,10 +104,10 @@ mixin AsyncOperationMixin<T, K extends StatefulWidget> on State<K> {
   ///   // Extract the message from server response
   ///   final message = json['message'] as String?;
   ///
-  ///   return OperationResult(user, message: message);
+  ///   return (user, message);
   /// }
   /// ```
-  FutureOr<OperationResult<T>> fetchWithMessage() =>
+  FutureOr<(T, String?)> fetchWithMessage() =>
       throw const _NotImplementedException('fetchWithMessage');
 
   /// Loads data and updates the operation state accordingly.
@@ -119,7 +118,7 @@ mixin AsyncOperationMixin<T, K extends StatefulWidget> on State<K> {
 
     try {
       // Try fetchWithMessage() first
-      OperationResult<T>? resultWithMessage;
+      (T, String?)? resultWithMessage;
       try {
         resultWithMessage = await fetchWithMessage();
       } on _NotImplementedException {
@@ -138,10 +137,7 @@ mixin AsyncOperationMixin<T, K extends StatefulWidget> on State<K> {
         } on _NotImplementedException {
           // fetch() was not overridden, use fetchWithMessage result
           if (!mounted || _generation != currentGeneration) return;
-          setSuccess(
-            resultWithMessage.data,
-            message: resultWithMessage.message,
-          );
+          setSuccess(resultWithMessage.$1, message: resultWithMessage.$2);
           return;
         }
       }

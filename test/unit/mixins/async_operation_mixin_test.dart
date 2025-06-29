@@ -669,10 +669,10 @@ class _FetchWithMessageWidgetState extends State<_FetchWithMessageWidget>
   bool get loadOnInit => widget.loadOnInitOverride ?? super.loadOnInit;
 
   @override
-  Future<OperationResult<TestData>> fetchWithMessage() async {
-    return OperationResult(
+  Future<(TestData, String?)> fetchWithMessage() async {
+    return (
       const TestData('from fetchWithMessage'),
-      message: 'Success message from fetchWithMessage',
+      'Success message from fetchWithMessage',
     );
   }
 
@@ -698,11 +698,8 @@ class _BothMethodsWidgetState extends State<_BothMethodsWidget>
   Future<TestData> fetch() async => const TestData('from fetch');
 
   @override
-  Future<OperationResult<TestData>> fetchWithMessage() async {
-    return OperationResult(
-      const TestData('from fetchWithMessage'),
-      message: 'Should error',
-    );
+  Future<(TestData, String?)> fetchWithMessage() async {
+    return (const TestData('from fetchWithMessage'), 'Should error');
   }
 
   @override
@@ -746,7 +743,7 @@ class _FetchWithMessageErrorWidgetState
   bool get loadOnInit => widget.loadOnInitOverride ?? super.loadOnInit;
 
   @override
-  Future<OperationResult<TestData>> fetchWithMessage() async {
+  Future<(TestData, String?)> fetchWithMessage() async {
     throw Exception('Network error: Connection timed out');
   }
 
@@ -794,11 +791,8 @@ class _FetchWithMessageNullWidgetState
   bool get loadOnInit => widget.loadOnInitOverride ?? super.loadOnInit;
 
   @override
-  Future<OperationResult<TestData>> fetchWithMessage() async {
-    return OperationResult(
-      const TestData('data without message'),
-      message: null,
-    );
+  Future<(TestData, String?)> fetchWithMessage() async {
+    return (const TestData('data without message'), null);
   }
 
   @override
@@ -822,7 +816,7 @@ class _FetchWithMessageStateErrorWidgetState
   bool get loadOnInit => widget.loadOnInitOverride ?? super.loadOnInit;
 
   @override
-  Future<OperationResult<TestData>> fetchWithMessage() async {
+  Future<(TestData, String?)> fetchWithMessage() async {
     throw StateError('Invalid state');
   }
 
@@ -847,7 +841,7 @@ class _FetchWithMessageFormatErrorWidgetState
   bool get loadOnInit => widget.loadOnInitOverride ?? super.loadOnInit;
 
   @override
-  Future<OperationResult<TestData>> fetchWithMessage() async {
+  Future<(TestData, String?)> fetchWithMessage() async {
     throw FormatException('Invalid format: JSON parsing failed');
   }
 
@@ -872,7 +866,7 @@ class _FetchWithMessageArgumentErrorWidgetState
   bool get loadOnInit => widget.loadOnInitOverride ?? super.loadOnInit;
 
   @override
-  Future<OperationResult<TestData>> fetchWithMessage() async {
+  Future<(TestData, String?)> fetchWithMessage() async {
     throw ArgumentError('Invalid argument: null value not allowed');
   }
 

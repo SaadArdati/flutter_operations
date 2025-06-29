@@ -352,7 +352,7 @@ class MyState extends State<MyWidget>
     with AsyncOperationMixin<MyData, MyWidget> {
   
   @override
-  Future<OperationResult<MyData>> fetchWithMessage() async {
+  Future<(MyData, String?)> fetchWithMessage() async {
     // Simulating an API response that includes both data and message
     final response = await http.get(Uri.parse('https://api.example.com/data'));
     final json = jsonDecode(response.body);
@@ -363,7 +363,7 @@ class MyState extends State<MyWidget>
     // Extract the message from the server response
     final message = json['message'] as String?;
     
-    return OperationResult(data, message: message);
+    return (data, message);
   }
 
   @override
@@ -403,12 +403,12 @@ For streams, use `streamWithMessage()` similarly:
 
 ```dart
 @override
-Stream<OperationResult<Message>> streamWithMessage() {
+Stream<(Message, String?)> streamWithMessage() {
   return messageStream.map((jsonMap) {
     // Assuming the stream emits Maps with 'data' and 'message' fields
     final data = Message.fromJson(jsonMap['data']);
     final message = jsonMap['message'] as String?;
-    return OperationResult(data, message: message);
+    return (data, message);
   });
 }
 ```

@@ -1,3 +1,113 @@
+## 1.3.0
+
+### BREAKING CHANGES
+
+- **Removed `OperationResult<T>` class** - Replaced with Dart records `(T, String?)` for less cpu and memory churn.
+- `fetchWithMessage()` now returns `FutureOr<(T, String?)>` instead of `FutureOr<OperationResult<T>>`.
+- `streamWithMessage()` now returns `Stream<(T, String?)>` instead of `Stream<OperationResult<T>>`.
+
+### Migration
+
+If you're using `fetchWithMessage()` or `streamWithMessage()`, update your code:
+
+**Before (1.2.0):**
+
+```dart
+@override
+Future<OperationResult<User>> fetchWithMessage() async {
+  final user = User.fromJson(json['data']);
+  final message = json['message'] as String?;
+  return OperationResult(user, message: message);
+}
+```
+
+**After (1.3.0):**
+
+```dart
+@override
+Future<(User, String?)> fetchWithMessage() async {
+  final user = User.fromJson(json['data']);
+  final message = json['message'] as String?;
+  return (user, message);
+}
+```
+
+**Before (1.2.0) - Streams:**
+
+```dart
+@override
+Stream<OperationResult<Message>> streamWithMessage() {
+  return messageStream.map((jsonMap) {
+    final data = Message.fromJson(jsonMap['data']);
+    final message = jsonMap['message'] as String?;
+    return OperationResult(data, message: message);
+  });
+}
+```
+
+**After (1.3.0) - Streams:**
+
+```dart
+@override
+Stream<(Message, String?)> streamWithMessage() {
+  return messageStream.map((jsonMap) {
+    final data = Message.fromJson(jsonMap['data']);
+    final message = jsonMap['message'] as String?;
+    return (data, message);
+  });
+}
+```
+
+The behavior remains the same - the only change is the API surface. All other functionality, including message handling
+in `SuccessOperation`, works exactly as before.
+
+## 1.2.0
+
+### New
+
+- Added `OperationResult<T>` class to hold data with optional success messages.
+- Added `fetchWithMessage()` method to `AsyncOperationMixin` for returning data with messages.
+- Added `streamWithMessage()` method to `StreamOperationMixin` for streams with messages.
+- Added optional `message` field to `SuccessOperation<T>` for success-related information.
+- Updated `setSuccess()` and `setData()` methods to accept optional `message` parameter.
+
+### Changed
+
+- `fetch()` and `fetchWithMessage()` are now both optional - exactly one must be overridden.
+- `stream()` and `streamWithMessage()` are now both optional - exactly one must be overridden.
+- Smart method detection: tries `*WithMessage()` first, falls back to standard method.
+- Throws an error messages when neither or both methods are overridden.
+
+### Usage
+
+```dart
+// Simple case - no message
+@override
+Future<User> fetch() async => api.getUser();
+
+// With message - use fetchWithMessage()
+@override
+Future<OperationResult<User>> fetchWithMessage() async {
+  // API returns a Map with 'data' and 'message' fields
+  final response = await http.get(Uri.parse('https://api.example.com/user'));
+  final json = jsonDecode(response.body);
+
+  // Decode the data
+  final user = User.fromJson(json['data'];
+
+      // Extract the message from server response
+      final message = json['message'] as String?;
+
+      return OperationResult(user, message: message);
+}
+```
+
+### Migration:
+
+- Existing code using `fetch()` continues to work without changes.
+- To add success messages, override `fetchWithMessage()` instead of `fetch()`.
+- Access messages in pattern matching: `SuccessOperation(:var data, :var message?)`.
+
 ## 1.1.1
 
 - Address format warnings.
