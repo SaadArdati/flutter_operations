@@ -79,9 +79,9 @@ base class LoadingOperation<T> extends OperationState<T> {
   @override
   bool operator ==(Object other) {
     if (identical(this, other)) return true;
-    return other.runtimeType == runtimeType && 
-           other is LoadingOperation<T> && 
-           other.data == data;
+    return other.runtimeType == runtimeType &&
+        other is LoadingOperation<T> &&
+        other.data == data;
   }
 
   @override

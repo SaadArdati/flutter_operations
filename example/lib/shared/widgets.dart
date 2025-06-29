@@ -222,9 +222,9 @@ class ProductCard extends StatelessWidget {
                   Text(
                     'Stock: ${product.stock}',
                     style: TextStyle(
-                      color: isStale 
-                        ? Colors.grey[400]
-                        : (product.stock > 0 ? Colors.grey[600] : Colors.red),
+                      color: isStale
+                          ? Colors.grey[400]
+                          : (product.stock > 0 ? Colors.grey[600] : Colors.red),
                     ),
                   ),
                   const SizedBox(height: 8),
@@ -232,7 +232,9 @@ class ProductCard extends StatelessWidget {
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton(
-                        onPressed: (product.stock > 0 && !isStale) ? onAddToCart : null,
+                        onPressed: (product.stock > 0 && !isStale)
+                            ? onAddToCart
+                            : null,
                         child: Text(
                           product.stock > 0 ? 'Add to Cart' : 'Out of Stock',
                         ),
@@ -246,7 +248,10 @@ class ProductCard extends StatelessWidget {
                 top: 8,
                 right: 8,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 2,
+                  ),
                   decoration: BoxDecoration(
                     color: Colors.orange,
                     borderRadius: BorderRadius.circular(12),

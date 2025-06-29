@@ -10,9 +10,7 @@ import 'package:flutter_operations/flutter_operations.dart' as ops;
 import '../../helpers/test_helpers.dart';
 
 class _TestStreamWidget extends StatefulWidget {
-  const _TestStreamWidget({
-    required this.streamBuilder,
-  });
+  const _TestStreamWidget({required this.streamBuilder});
 
   final Stream<StreamTestData> Function() streamBuilder;
 

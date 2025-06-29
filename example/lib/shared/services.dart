@@ -44,8 +44,7 @@ class MockApiService {
     // Pick a random subset of products to simulate search results
     final filteredProducts = [
       for (final product in allProducts)
-        if (_random.nextBool())
-          product
+        if (_random.nextBool()) product,
     ];
 
     return filteredProducts;

@@ -1,3 +1,7 @@
+## 1.1.1
+
+- Address format warnings.
+
 ## 1.1.0
 
 **BREAKING CHANGES:**
