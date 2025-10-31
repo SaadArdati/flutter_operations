@@ -12,6 +12,5 @@
 library;
 
 export 'src/async_operation_mixin.dart';
-export 'src/operation_result.dart';
 export 'src/operation_state.dart';
 export 'src/stream_operation_mixin.dart';
