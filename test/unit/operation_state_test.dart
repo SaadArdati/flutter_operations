@@ -100,6 +100,125 @@ void main() {
         expect(state4, equals(state5));
         expect(state1, isNot(equals(state4)));
       });
+
+      group('dataOrNull', () {
+        test('should return data for non-empty success state', () {
+          const state = SuccessOperation<TestData>(data: TestData('test'));
+
+          expect(state.dataOrNull, isNotNull);
+          expect(state.dataOrNull?.value, equals('test'));
+          expect(state.dataOrNull, equals(state.data));
+        });
+
+        test('should return null for empty success state', () {
+          const state = SuccessOperation<String>.empty();
+
+          expect(state.dataOrNull, isNull);
+          expect(state.empty, isTrue);
+        });
+
+        test('should allow safe access without checking empty flag', () {
+          const states = <SuccessOperation<String>>[
+            SuccessOperation<String>(data: 'hello'),
+            SuccessOperation<String>.empty(),
+          ];
+
+          // This should not throw for either state
+          final results = states
+              .map((s) => s.dataOrNull?.toUpperCase())
+              .toList();
+
+          expect(results[0], equals('HELLO'));
+          expect(results[1], isNull);
+        });
+      });
+
+      group('empty state equality and hashCode', () {
+        test('should compare empty states without throwing', () {
+          const empty1 = SuccessOperation<String>.empty();
+          const empty2 = SuccessOperation<String>.empty();
+          const empty3 = SuccessOperation<String>.empty(message: 'done');
+
+          // These comparisons should not throw
+          expect(empty1 == empty2, isTrue);
+          expect(empty1 == empty3, isFalse);
+          expect(empty1, equals(empty2));
+          expect(empty1, isNot(equals(empty3)));
+        });
+
+        test('should compute hashCode for empty states without throwing', () {
+          const empty1 = SuccessOperation<String>.empty();
+          const empty2 = SuccessOperation<String>.empty();
+          const empty3 = SuccessOperation<String>.empty(message: 'done');
+
+          // These should not throw
+          expect(empty1.hashCode, equals(empty2.hashCode));
+          expect(empty1.hashCode, isNot(equals(empty3.hashCode)));
+        });
+
+        test('should work correctly in Sets and Maps', () {
+          const empty1 = SuccessOperation<String>.empty();
+          const empty2 = SuccessOperation<String>.empty();
+          const withData = SuccessOperation<String>(data: 'test');
+
+          // Build set programmatically to test deduplication behavior
+          final set = <SuccessOperation<String>>{}..add(empty1)..add(
+              empty2) // Should be deduplicated (equal to empty1)
+            ..add(withData);
+          expect(set.length, equals(2)); // empty1 and empty2 are equal
+
+          // Build map programmatically to test key deduplication
+          final map = <SuccessOperation<String>, String>{}
+            ..[empty1] = 'first'
+            ..[empty2] =
+                'second' // Should overwrite first (equal key)
+            ..[withData] = 'third';
+          expect(map.length, equals(2));
+          expect(map[empty1], equals('second'));
+        });
+      });
+
+      group('empty state with message', () {
+        test('should support optional message in empty state', () {
+          const state = SuccessOperation<String>.empty(message: 'Item deleted');
+
+          expect(state.empty, isTrue);
+          expect(state.message, equals('Item deleted'));
+          expect(state.dataOrNull, isNull);
+        });
+
+        test('should differentiate empty states by message', () {
+          const state1 = SuccessOperation<String>.empty();
+          const state2 = SuccessOperation<String>.empty(message: 'Done');
+          const state3 = SuccessOperation<String>.empty(message: 'Done');
+
+          expect(state1, isNot(equals(state2)));
+          expect(state2, equals(state3));
+        });
+      });
+
+      group('toString', () {
+        test('should produce readable output for non-empty state', () {
+          const state = SuccessOperation<String>(
+            data: 'hello',
+            message: 'fetched',
+          );
+
+          expect(state.toString(), contains('hello'));
+          expect(state.toString(), contains('fetched'));
+          expect(state.toString(), contains('empty: false'));
+        });
+
+        test('should produce readable output for empty state', () {
+          const state = SuccessOperation<String>.empty(message: 'deleted');
+
+          // Should not throw and should be readable
+          final str = state.toString();
+          expect(str, contains('deleted'));
+          expect(str, contains('empty: true'));
+          expect(str, contains('null'));
+        });
+      });
     });
 
     group('ErrorOperation', () {

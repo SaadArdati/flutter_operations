@@ -36,10 +36,10 @@ sealed class OperationState<T> {
   T? get data => _data;
 
   /// Whether this state has associated data.
-  bool get hasData => data != null;
+  bool get hasData => _data != null;
 
   /// Whether this state has no associated data.
-  bool get hasNoData => data == null;
+  bool get hasNoData => _data == null;
 
   /// A convenience getter to check if the operation is currently loading
   /// and not an idle state.
@@ -102,16 +102,20 @@ final class IdleOperation<T> extends LoadingOperation<T> {
 }
 
 /// Represents a successfully completed operation with associated data.
-/// The data is guaranteed to be non-null in this state.
+/// The data is guaranteed to be non-null in this state unless created with
+/// [SuccessOperation.empty].
 final class SuccessOperation<T> extends OperationState<T> {
   /// Creates a success state with the operation's result data.
-  const SuccessOperation({required T super.data, this.message})
-    : empty = data == null;
+  const SuccessOperation({required T super.data, this.message}) : empty = false;
 
   /// Creates an empty success state, indicating the operation completed
   /// successfully but returned no data.
-  const SuccessOperation.empty({super.data, this.message})
-    : empty = data == null;
+  ///
+  /// Use this for operations that succeed but have no meaningful return value,
+  /// such as delete operations or fire-and-forget actions.
+  const SuccessOperation.empty({this.message})
+      : empty = true,
+        super(data: null);
 
   /// Whether the operation completed successfully but returned no data.
   final bool empty;
@@ -121,15 +125,22 @@ final class SuccessOperation<T> extends OperationState<T> {
   /// specific details in the message, separate from the main data payload.
   final String? message;
 
+  /// The data if available, or null for empty operations.
+  ///
+  /// Use this for safe access when you're unsure if the operation is empty.
+  T? get dataOrNull => _data;
+
   /// The data associated with the successful operation.
+  ///
+  /// Throws [StateError] if this is an empty operation. Use [dataOrNull] or
+  /// check the [empty] flag first for empty operations.
   @override
   T get data {
     if (empty) {
-      try {
-        return _data as T;
-      } catch (_) {
-        throw StateError('No data available in an empty operation');
-      }
+      throw StateError(
+        'No data available in an empty operation. '
+            'Use dataOrNull or check the empty flag first.',
+      );
     }
     return _data as T;
   }
@@ -138,17 +149,17 @@ final class SuccessOperation<T> extends OperationState<T> {
   bool operator ==(Object other) {
     if (identical(this, other)) return true;
     return other is SuccessOperation<T> &&
-        other.data == data &&
+        other._data == _data &&
         other.message == message &&
         other.empty == empty;
   }
 
   @override
-  int get hashCode => data.hashCode ^ message.hashCode ^ empty.hashCode;
+  int get hashCode => Object.hash(_data, message, empty);
 
   @override
   String toString() =>
-      'SuccessOperation(data: $data, message: $message, empty: $empty)';
+      'SuccessOperation(data: $_data, message: $message, empty: $empty)';
 }
 
 /// Represents a failed operation with error details.

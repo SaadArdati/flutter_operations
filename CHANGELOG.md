@@ -1,3 +1,44 @@
+## 1.4.0
+
+### BREAKING CHANGES
+
+- **`SuccessOperation.empty()` no longer accepts a `data` parameter** - The constructor now always creates a truly empty
+  state. Previously, passing `data` would create a non-empty state with `empty = false`, which was confusing.
+
+### Bug Fixes
+
+- **Fixed crash when comparing empty `SuccessOperation` states** - The `==` operator and `hashCode` now use the internal
+  `_data` field instead of calling the throwing `data` getter. This fixes issues with Bloc/Cubit state comparison when
+  emitting `SuccessOperation.empty()`.
+- **Fixed `hasData`/`hasNoData` getters throwing on empty operations** - These now safely check the internal field.
+- **Fixed `toString()` for empty operations** - No longer throws when converting empty states to string.
+
+### New Features
+
+- **Added `dataOrNull` getter to `SuccessOperation`** - Provides safe nullable access to data without throwing. Use this
+  when you're unsure if the operation is empty, or in contexts where you want to handle both cases uniformly.
+
+### Migration
+
+If you were using `SuccessOperation.empty(data: someValue)`, this will no longer compile. This usage was semantically
+incorrect - use `SuccessOperation(data: someValue)` instead for non-empty states.
+
+```dart
+// Before (incorrect usage that will no longer compile):
+SuccessOperation.empty
+(
+data: myData) // ❌ Removed
+
+// After (correct usage):
+SuccessOperation(data: myData) // ✅ Use this for non-empty
+SuccessOperation.
+empty
+(
+) // ✅ Use this for truly empty
+```
+
+---
+
 ## 1.3.0
 
 ### BREAKING CHANGES
