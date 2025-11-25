@@ -208,7 +208,7 @@ Future<OperationResult<User>> fetchWithMessage() async {
 
 ### BREAKING CHANGES:
 
-- Removed `idle` parameter from `LoadingOperation` 
+- Removed `idle` parameter from `LoadingOperation`
 - Added `IdleOperation<T>` class extending `LoadingOperation<T>`
 - Changed `LoadingOperation` from `final` to `base` class
 - Added convenience getters: `hasNoData`, `isLoading`, `isIdle`, `isSuccess`, `isError`, etc.
@@ -217,6 +217,7 @@ Future<OperationResult<User>> fetchWithMessage() async {
 - Removed `doesGlobalRefresh` parameter from internal methods
 
 **Migration:**
+
 - Replace `LoadingOperation.idle` checks with `operation.isIdle`
 - Handle `IdleOperation` in pattern matching when `loadOnInit = false`
 - Update equality checks due to `LoadingOperation` structure changes

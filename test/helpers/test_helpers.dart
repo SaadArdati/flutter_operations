@@ -39,6 +39,7 @@ class TestData {
 
 class StreamTestData {
   final int value;
+
   const StreamTestData(this.value);
 
   @override
@@ -550,6 +551,7 @@ class ControllableFuture<T> {
   Future<T> get future => _completer.future;
 
   void complete(T value) => _completer.complete(value);
+
   void completeError(Object error, [StackTrace? stackTrace]) =>
       _completer.completeError(error, stackTrace);
 
@@ -562,8 +564,10 @@ class ControllableStreamController<T> {
   Stream<T> get stream => _controller.stream;
 
   void add(T value) => _controller.add(value);
+
   void addError(Object error, [StackTrace? stackTrace]) =>
       _controller.addError(error, stackTrace);
+
   void close() => _controller.close();
 
   bool get isClosed => _controller.isClosed;
