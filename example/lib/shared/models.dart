@@ -32,24 +32,28 @@ class Product {
     required this.category,
   });
 
-  static List<Product> examples() => [
-    for (int i = 0; i < 30; i++)
-      Product(
-        id: 'prod_$i',
-        name: 'Product $i',
-        price: (10 + i * 2.5),
-        stock: Random().nextInt(20),
-        category: [
-          'Electronics',
-          'Kitchen',
-          'Education',
-          'Clothing',
-          'Sports',
-          'Books',
-          'Toys',
-          'Health',
-          'Beauty',
-        ][Random().nextInt(3)],
-      ),
-  ];
+  static List<Product> examples() {
+    final random = Random();
+    const categories = [
+      'Electronics',
+      'Kitchen',
+      'Education',
+      'Clothing',
+      'Sports',
+      'Books',
+      'Toys',
+      'Health',
+      'Beauty',
+    ];
+    return [
+      for (int i = 0; i < 30; i++)
+        Product(
+          id: 'prod_$i',
+          name: 'Product $i',
+          price: (10 + i * 2.5),
+          stock: random.nextInt(20),
+          category: categories[random.nextInt(categories.length)],
+        ),
+    ];
+  }
 }

@@ -1,3 +1,41 @@
+## 1.5.0
+
+### New Features
+
+- **Promoted `dataOrNull` getter to `OperationState` base class** — Previously only available on `SuccessOperation`,
+  `dataOrNull` is now accessible on all state types (`LoadingOperation`, `IdleOperation`, `ErrorOperation`,
+  `SuccessOperation`). This allows safe nullable data access without pattern-matching first. For
+  `SuccessOperation.empty()`
+  states, it returns `null` instead of throwing like the `data` getter does.
+
+### Improvements
+
+- **Replaced `print()` with `developer.log()` in default `onError` handlers** — Both `AsyncOperationMixin` and
+  `StreamOperationMixin` now use `dart:developer`'s `log()` for default error logging. This integrates with Flutter
+  DevTools, provides structured metadata (error object, stack trace, category name), and is automatically filtered out
+  in release builds. Zero new dependencies.
+- **Fixed `analysis_options.yaml`** — Now correctly uses `package:flutter_lints/flutter.yaml` to match the
+  `flutter_lints` dev dependency, enabling Flutter-specific lint rules.
+- **Improved dual-override validation comments** — Added clarifying comments explaining why the `fetch()`/`stream()`
+  validation call is side-effect-free in the happy path.
+- **Added doc comment for nullable `T` edge case on `SuccessOperation`** — Documents the behavior when `T` itself is
+  nullable (e.g., `SuccessOperation<String?>(data: null)`).
+
+### Bug Fixes
+
+- **Fixed `_NotImplementedException.toString` in `StreamOperationMixin`** — Was incorrectly displaying
+  `AsyncOperationMixinException` instead of `StreamOperationMixinException`.
+- **Made `idle` parameter functional in `StreamOperationMixin.setLoading`** — The parameter was previously accepted but
+  never used. Now `setLoading(idle: true)` correctly produces an `IdleOperation` and invokes the `onIdle` callback.
+- **Fixed `Product.examples()` in example app** — `Random().nextInt(3)` only selected from 3 of 9 categories. Now uses
+  `random.nextInt(categories.length)` with a single `Random` instance.
+- **Fixed timer leak in `AdvancedCustomHandlersExample`** — Added `dispose()` override to cancel `_retryTimer` and
+  `_circuitBreakerTimer`, preventing callbacks firing on unmounted widgets.
+- **Fixed `BasicStreamExample` builder** — Now uses the `value` parameter from `ValueListenableBuilder` instead of
+  reading `operation` directly.
+
+---
+
 ## 1.4.0
 
 ### BREAKING CHANGES

@@ -162,8 +162,9 @@ void main() {
           const withData = SuccessOperation<String>(data: 'test');
 
           // Build set programmatically to test deduplication behavior
-          final set = <SuccessOperation<String>>{}..add(empty1)..add(
-              empty2) // Should be deduplicated (equal to empty1)
+          final set = <SuccessOperation<String>>{}
+            ..add(empty1)
+            ..add(empty2) // Should be deduplicated (equal to empty1)
             ..add(withData);
           expect(set.length, equals(2)); // empty1 and empty2 are equal
 

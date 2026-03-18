@@ -35,6 +35,13 @@ sealed class OperationState<T> {
   /// The data associated with the operation, if any.
   T? get data => _data;
 
+  /// The data associated with the operation, if any.
+  ///
+  /// Unlike [SuccessOperation.data], this getter never throws. It returns
+  /// `null` for [SuccessOperation.empty] states instead of throwing
+  /// [StateError], making it safe for unconditional access across all states.
+  T? get dataOrNull => _data;
+
   /// Whether this state has associated data.
   bool get hasData => _data != null;
 
@@ -104,6 +111,13 @@ final class IdleOperation<T> extends LoadingOperation<T> {
 /// Represents a successfully completed operation with associated data.
 /// The data is guaranteed to be non-null in this state unless created with
 /// [SuccessOperation.empty].
+///
+/// Note on nullable types: When `T` is itself nullable
+/// (e.g., `SuccessOperation<String?>`), creating
+/// `SuccessOperation<String?>(data: null)` is allowed but `empty` will be
+/// `false`. The [data] getter will return `null` through the cast without
+/// throwing. If this is not the intended behavior, use
+/// [SuccessOperation.empty] instead.
 final class SuccessOperation<T> extends OperationState<T> {
   /// Creates a success state with the operation's result data.
   const SuccessOperation({required T super.data, this.message}) : empty = false;
@@ -114,8 +128,8 @@ final class SuccessOperation<T> extends OperationState<T> {
   /// Use this for operations that succeed but have no meaningful return value,
   /// such as delete operations or fire-and-forget actions.
   const SuccessOperation.empty({this.message})
-      : empty = true,
-        super(data: null);
+    : empty = true,
+      super(data: null);
 
   /// Whether the operation completed successfully but returned no data.
   final bool empty;
@@ -124,11 +138,6 @@ final class SuccessOperation<T> extends OperationState<T> {
   /// An example would be a server sending a success confirmation with
   /// specific details in the message, separate from the main data payload.
   final String? message;
-
-  /// The data if available, or null for empty operations.
-  ///
-  /// Use this for safe access when you're unsure if the operation is empty.
-  T? get dataOrNull => _data;
 
   /// The data associated with the successful operation.
   ///
@@ -139,7 +148,7 @@ final class SuccessOperation<T> extends OperationState<T> {
     if (empty) {
       throw StateError(
         'No data available in an empty operation. '
-            'Use dataOrNull or check the empty flag first.',
+        'Use dataOrNull or check the empty flag first.',
       );
     }
     return _data as T;

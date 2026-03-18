@@ -248,7 +248,7 @@ class _BasicStreamExampleState extends State<BasicStreamExample>
         padding: const EdgeInsets.all(16),
         child: ValueListenableBuilder<OperationState<int>>(
           valueListenable: operationNotifier,
-          builder: (context, value, child) => switch (operation) {
+          builder: (context, value, child) => switch (value) {
             LoadingOperation() => const LoadingStateWidget(
               message: 'Connecting to stream...',
             ),
@@ -364,6 +364,13 @@ class _AdvancedCustomHandlersExampleState
   Timer? _retryTimer;
   Timer? _circuitBreakerTimer;
   bool _circuitBreakerOpen = false;
+
+  @override
+  void dispose() {
+    _retryTimer?.cancel();
+    _circuitBreakerTimer?.cancel();
+    super.dispose();
+  }
 
   @override
   Future<User> fetch() async {

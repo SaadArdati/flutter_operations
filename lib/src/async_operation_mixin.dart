@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:developer' as developer;
 
 import 'package:flutter/widgets.dart';
 
@@ -117,7 +118,7 @@ mixin AsyncOperationMixin<T, K extends StatefulWidget> on State<K> {
     setLoading(cached: cached);
 
     try {
-      // Try fetchWithMessage() first
+      // Try fetchWithMessage() first.
       (T, String?)? resultWithMessage;
       try {
         resultWithMessage = await fetchWithMessage();
@@ -126,7 +127,11 @@ mixin AsyncOperationMixin<T, K extends StatefulWidget> on State<K> {
       }
 
       if (resultWithMessage != null) {
-        // fetchWithMessage() was overridden, validate fetch() is not
+        // fetchWithMessage() was overridden, validate fetch() is not.
+        // This check is free in the happy path: the default fetch() throws
+        // _NotImplementedException synchronously with zero side effects.
+        // Side effects only occur in the error case (both overridden),
+        // where we throw StateError anyway.
         try {
           await fetch();
           // If we get here, fetch() was also overridden (didn't throw)
@@ -158,11 +163,9 @@ mixin AsyncOperationMixin<T, K extends StatefulWidget> on State<K> {
         );
       }
 
-      // Don't report our internal exception as an error
-      if (exception is StateError) {
-        // Re-throw StateError (from validation)
-        rethrow;
-      }
+      // Re-throw StateError — it indicates a programming error,
+      // not a runtime failure.
+      if (exception is StateError) rethrow;
 
       setError(
         exception,
@@ -250,9 +253,12 @@ mixin AsyncOperationMixin<T, K extends StatefulWidget> on State<K> {
 
   /// Called when an error occurs. Override for custom error handling.
   void onError(Object exception, StackTrace stackTrace, {String? message}) {
-    print(message ?? errorMessage(exception, stackTrace));
-    print(exception);
-    print(stackTrace);
+    developer.log(
+      message ?? errorMessage(exception, stackTrace),
+      name: 'AsyncOperationMixin',
+      error: exception,
+      stackTrace: stackTrace,
+    );
   }
 
   /// Called when data is successfully loaded. Override for custom handling.
@@ -261,5 +267,6 @@ mixin AsyncOperationMixin<T, K extends StatefulWidget> on State<K> {
   /// Called when the state transitions to loading. Override for custom handling.
   void onLoading() {}
 
+  /// Called when the state transitions to idle. Override for custom handling.
   void onIdle() {}
 }

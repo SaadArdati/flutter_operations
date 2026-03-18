@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:developer' as developer;
 
 import 'package:flutter/widgets.dart';
 
@@ -13,7 +14,7 @@ class _NotImplementedException implements Exception {
 
   @override
   String toString() =>
-      'AsyncOperationMixinException: $methodName not implemented';
+      'StreamOperationMixinException: $methodName not implemented';
 }
 
 /// A mixin that adds stream-based state management to a [StatefulWidget].
@@ -116,7 +117,7 @@ mixin StreamOperationMixin<T, K extends StatefulWidget> on State<K> {
     }
 
     try {
-      // Try streamWithMessage() first
+      // Try streamWithMessage() first.
       Stream<(T, String?)>? streamWithMsg;
       try {
         streamWithMsg = streamWithMessage();
@@ -125,11 +126,12 @@ mixin StreamOperationMixin<T, K extends StatefulWidget> on State<K> {
       }
 
       if (streamWithMsg != null) {
-        // streamWithMessage() was overridden, validate stream() is not
+        // streamWithMessage() was overridden, validate stream() is not.
+        // This check is free in the happy path: the default stream() throws
+        // _NotImplementedException synchronously with zero side effects.
         try {
           stream();
-          // If we get here, stream() was also overridden (didn't throw),
-          // We notify the developer that both methods are overridden.
+          // If we get here, stream() was also overridden (didn't throw)
           throw StateError(
             'Both stream() and streamWithMessage() are overridden. '
             'You must override exactly one of them.',
@@ -188,11 +190,9 @@ mixin StreamOperationMixin<T, K extends StatefulWidget> on State<K> {
         );
       }
 
-      // Don't report our internal exception as an error
-      if (exception is StateError) {
-        // Re-throw StateError (from validation)
-        rethrow;
-      }
+      // Re-throw StateError — it indicates a programming error,
+      // not a runtime failure.
+      if (exception is StateError) rethrow;
 
       setError(
         exception,
@@ -216,16 +216,18 @@ mixin StreamOperationMixin<T, K extends StatefulWidget> on State<K> {
     if (mounted && globalRefresh) setState(() {});
   }
 
-  /// Updates the state to loading.
+  /// Updates the state to loading, or idle if [idle] is `true`.
   void setLoading({bool idle = false, bool cached = true}) {
     final lastData = cached ? operationNotifier.value.data : null;
-    final newOp = LoadingOperation<T>(data: lastData);
+    final newOp = idle
+        ? IdleOperation<T>(data: lastData)
+        : LoadingOperation<T>(data: lastData);
     if (newOp == operationNotifier.value) {
       return;
     }
 
     operationNotifier.value = newOp;
-    onLoading();
+    idle ? onIdle() : onLoading();
 
     if (mounted && globalRefresh) setState(() {});
   }
@@ -277,9 +279,12 @@ mixin StreamOperationMixin<T, K extends StatefulWidget> on State<K> {
 
   /// Called when an error occurs. Override for custom error handling.
   void onError(Object exception, StackTrace stackTrace, {String? message}) {
-    print(message ?? errorMessage(exception, stackTrace));
-    print(exception);
-    print(stackTrace);
+    developer.log(
+      message ?? errorMessage(exception, stackTrace),
+      name: 'StreamOperationMixin',
+      error: exception,
+      stackTrace: stackTrace,
+    );
   }
 
   /// Called when the state transitions to loading.
