@@ -1,3 +1,61 @@
+## 2.0.0
+
+### BREAKING CHANGES
+
+- **`SuccessOperation` is now `sealed`** with two subtypes:
+  - **`ValueSuccessOperation<T>`**: Carries non-null data. `data` returns `T`.
+  - **`VoidSuccessOperation<T>`**: No data (fire-and-forget). `data` returns `null`.
+- **`SuccessOperation.data` now returns `T?`** instead of `T`. Use `ValueSuccessOperation(:var data)` for
+  guaranteed non-null access, or `SuccessOperation(:var data?)` with a null-check pattern.
+- **Removed `dataOrNull` getter** — The base `data` getter already returns `T?`, making `dataOrNull` redundant.
+- **`empty` is now a computed getter** — `bool get empty => this is VoidSuccessOperation<T>`. No longer a stored field.
+  Behavior is unchanged.
+
+### New Features
+
+- **`ValueSuccessOperation<T>`** — Guarantees non-null `data` (`T`). Created via `SuccessOperation(data: x)`.
+- **`VoidSuccessOperation<T>`** — For operations that succeed without data. Created via `SuccessOperation.empty()`.
+- **`setEmpty({String? message})`** — New method on both `AsyncOperationMixin` and `StreamOperationMixin` for emitting
+  `VoidSuccessOperation`. Use for delete, logout, or fire-and-forget actions.
+- **`onEmpty(String? message)`** — New lifecycle callback on both mixins, fired when `setEmpty()` is called.
+- **Exhaustive matching on success subtypes** — Because `SuccessOperation` is sealed, matching `ValueSuccessOperation`
+  and `VoidSuccessOperation` individually is now compiler-enforced.
+
+### Improvements
+
+- **Consistent `runtimeType` in equality and hashCode** — All state classes now include `runtimeType` in both
+  `operator ==` and `hashCode` for correctness in hash-based collections.
+- **Stream mixin `mounted` guard on data callbacks** — Both `onData` callbacks in `StreamOperationMixin` now check
+  `mounted` before setting state, preventing writes to disposed `ValueNotifier`s.
+- **Comprehensive test suite** — 91 tests covering: reflexive/symmetric/transitive equality, cross-type inequality,
+  hashCode stability and consistency, const canonicalization, toString for all types, edge cases (nullable T, empty
+  collections, Value vs Void with same data).
+- **Rewritten example app** — Five examples showcasing all package features: basic fetch, fire-and-forget, streams,
+  search with idle, and global refresh patterns.
+
+### Migration
+
+Construction is unchanged — redirecting factory constructors handle the new types transparently:
+
+```dart
+SuccessOperation
+(
+data
+:
+x
+) // creates ValueSuccessOperation (same call site)
+SuccessOperation
+.
+empty
+(
+) // creates VoidSuccessOperation (same call site)
+```
+
+Switch expressions that use `SuccessOperation` as a catch-all continue to work. To opt into type-safe access,
+match the subtypes individually. See README for full migration guide.
+
+---
+
 ## 1.5.0
 
 ### New Features
@@ -167,68 +225,11 @@ Future<User> fetch() async => api.getUser();
 // With message - use fetchWithMessage()
 @override
 Future<OperationResult<User>> fetchWithMessage() async {
-  // API returns a Map with 'data' and 'message' fields
   final response = await http.get(Uri.parse('https://api.example.com/user'));
   final json = jsonDecode(response.body);
-
-  // Decode the data
-  final user = User.fromJson(json['data'];
-
-      // Extract the message from server response
-      final message = json['message'] as String?;
-
-      return OperationResult(user, message: message);
-}
-```
-
-### Migration:
-
-- Existing code using `fetch()` continues to work without changes.
-- To add success messages, override `fetchWithMessage()` instead of `fetch()`.
-- Access messages in pattern matching: `SuccessOperation(:var data, :var message?)`.
-
-## 1.1.1
-
-- Address format warnings.
-
-## 1.2.0
-
-### New
-
-- Added `OperationResult<T>` class to hold data with optional success messages.
-- Added `fetchWithMessage()` method to `AsyncOperationMixin` for returning data with messages.
-- Added `streamWithMessage()` method to `StreamOperationMixin` for streams with messages.
-- Added optional `message` field to `SuccessOperation<T>` for success-related information.
-- Updated `setSuccess()` and `setData()` methods to accept optional `message` parameter.
-
-### Changed
-
-- `fetch()` and `fetchWithMessage()` are now both optional - exactly one must be overridden.
-- `stream()` and `streamWithMessage()` are now both optional - exactly one must be overridden.
-- Smart method detection: tries `*WithMessage()` first, falls back to standard method.
-- Throws an error messages when neither or both methods are overridden.
-
-### Usage
-
-```dart
-// Simple case - no message
-@override
-Future<User> fetch() async => api.getUser();
-
-// With message - use fetchWithMessage()
-@override
-Future<OperationResult<User>> fetchWithMessage() async {
-  // API returns a Map with 'data' and 'message' fields
-  final response = await http.get(Uri.parse('https://api.example.com/user'));
-  final json = jsonDecode(response.body);
-
-  // Decode the data
-  final user = User.fromJson(json['data'];
-
-      // Extract the message from server response
-      final message = json['message'] as String?;
-
-      return OperationResult(user, message: message);
+  final user = User.fromJson(json['data']);
+  final message = json['message'] as String?;
+  return OperationResult(user, message: message);
 }
 ```
 

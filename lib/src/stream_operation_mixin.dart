@@ -140,9 +140,8 @@ mixin StreamOperationMixin<T, K extends StatefulWidget> on State<K> {
           // stream() was not overridden, use streamWithMessage
           _streamSubscription = streamWithMsg.listen(
             (result) {
-              if (_generation == currentGeneration) {
-                setData(result.$1, message: result.$2);
-              }
+              if (!mounted || _generation != currentGeneration) return;
+              setData(result.$1, message: result.$2);
             },
             onError: (exception, stackTrace) {
               if (!mounted || _generation != currentGeneration) return;
@@ -163,9 +162,8 @@ mixin StreamOperationMixin<T, K extends StatefulWidget> on State<K> {
       // streamWithMessage() was not overridden, use stream()
       _streamSubscription = stream().listen(
         (value) {
-          if (_generation == currentGeneration) {
-            setData(value);
-          }
+          if (!mounted || _generation != currentGeneration) return;
+          setData(value);
         },
         onError: (exception, stackTrace) {
           if (!mounted || _generation != currentGeneration) return;
@@ -247,6 +245,22 @@ mixin StreamOperationMixin<T, K extends StatefulWidget> on State<K> {
     if (mounted && globalRefresh) setState(() {});
   }
 
+  /// Updates the state to an empty success ([VoidSuccessOperation]).
+  ///
+  /// Use this for streams that complete successfully but produce no data.
+  void setEmpty({String? message}) {
+    if (operationNotifier.value case VoidSuccessOperation(
+      message: final oldMessage,
+    ) when oldMessage == message) {
+      return;
+    }
+
+    operationNotifier.value = SuccessOperation<T>.empty(message: message);
+    onEmpty(message);
+
+    if (mounted && globalRefresh) setState(() {});
+  }
+
   /// Updates the state to error with the provided exception details.
   void setError(
     Object exception,
@@ -292,6 +306,10 @@ mixin StreamOperationMixin<T, K extends StatefulWidget> on State<K> {
 
   /// Called when the stream emits a new value.
   void onData(T value) {}
+
+  /// Called when an empty success ([VoidSuccessOperation]) is emitted.
+  /// Override for custom handling.
+  void onEmpty(String? message) {}
 
   /// Called when the state transitions to idle.
   void onIdle() {}

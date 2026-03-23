@@ -57,8 +57,27 @@ void main() {
     });
 
     group('SuccessOperation', () {
-      test('should guarantee non-null data for non-empty state', () {
+      test('should create ValueSuccessOperation via redirecting factory', () {
         const state = SuccessOperation<TestData>(data: TestData('test'));
+
+        expect(state, isA<ValueSuccessOperation<TestData>>());
+        expect(state.empty, isFalse);
+        expect(state.hasData, isTrue);
+        expect(state.isSuccess, isTrue);
+      });
+
+      test('should create VoidSuccessOperation via redirecting factory', () {
+        const state = SuccessOperation<TestData?>.empty();
+
+        expect(state, isA<VoidSuccessOperation<TestData?>>());
+        expect(state.empty, isTrue);
+        expect(state.isSuccess, isTrue);
+        expect(state.hasData, isFalse);
+        expect(state.hasNoData, isTrue);
+      });
+
+      test('should guarantee non-null data on ValueSuccessOperation', () {
+        const state = ValueSuccessOperation<TestData>(data: TestData('test'));
         TestData data = state.data;
 
         expect(data.value, equals('test'));
@@ -66,26 +85,11 @@ void main() {
         expect(state.hasData, isTrue);
       });
 
-      test('should handle empty success state correctly', () {
-        const emptySuccess = SuccessOperation<TestData?>.empty();
-        const regularSuccess = SuccessOperation<TestData>(
-          data: TestData('test'),
-        );
+      test('should return null data on VoidSuccessOperation', () {
+        const state = VoidSuccessOperation<String>();
 
-        expect(emptySuccess.empty, isTrue);
-        expect(emptySuccess.isSuccess, isTrue);
-        expect(emptySuccess.hasData, isFalse);
-        expect(emptySuccess.hasNoData, isTrue);
-
-        expect(regularSuccess.empty, isFalse);
-        expect(regularSuccess.isSuccess, isTrue);
-        expect(regularSuccess.hasData, isTrue);
-        expect(regularSuccess.data.value, equals('test'));
-      });
-
-      test('should throw StateError when accessing data in empty state', () {
-        const state = SuccessOperation<String>.empty();
-        expect(() => state.data, throwsA(isA<StateError>()));
+        expect(state.data, isNull);
+        expect(state.empty, isTrue);
       });
 
       test('should handle equality correctly', () {
@@ -101,36 +105,17 @@ void main() {
         expect(state1, isNot(equals(state4)));
       });
 
-      group('dataOrNull', () {
-        test('should return data for non-empty success state', () {
-          const state = SuccessOperation<TestData>(data: TestData('test'));
+      test('should allow safe nullable access across success variants', () {
+        const states = <SuccessOperation<String>>[
+          SuccessOperation<String>(data: 'hello'),
+          SuccessOperation<String>.empty(),
+        ];
 
-          expect(state.dataOrNull, isNotNull);
-          expect(state.dataOrNull?.value, equals('test'));
-          expect(state.dataOrNull, equals(state.data));
-        });
+        // data is T? on the base SuccessOperation — safe for both
+        final results = states.map((s) => s.data?.toUpperCase()).toList();
 
-        test('should return null for empty success state', () {
-          const state = SuccessOperation<String>.empty();
-
-          expect(state.dataOrNull, isNull);
-          expect(state.empty, isTrue);
-        });
-
-        test('should allow safe access without checking empty flag', () {
-          const states = <SuccessOperation<String>>[
-            SuccessOperation<String>(data: 'hello'),
-            SuccessOperation<String>.empty(),
-          ];
-
-          // This should not throw for either state
-          final results = states
-              .map((s) => s.dataOrNull?.toUpperCase())
-              .toList();
-
-          expect(results[0], equals('HELLO'));
-          expect(results[1], isNull);
-        });
+        expect(results[0], equals('HELLO'));
+        expect(results[1], isNull);
       });
 
       group('empty state equality and hashCode', () {
@@ -185,7 +170,7 @@ void main() {
 
           expect(state.empty, isTrue);
           expect(state.message, equals('Item deleted'));
-          expect(state.dataOrNull, isNull);
+          expect(state.data, isNull);
         });
 
         test('should differentiate empty states by message', () {
@@ -199,25 +184,23 @@ void main() {
       });
 
       group('toString', () {
-        test('should produce readable output for non-empty state', () {
+        test('should produce readable output for ValueSuccessOperation', () {
           const state = SuccessOperation<String>(
             data: 'hello',
             message: 'fetched',
           );
 
+          expect(state.toString(), contains('ValueSuccessOperation'));
           expect(state.toString(), contains('hello'));
           expect(state.toString(), contains('fetched'));
-          expect(state.toString(), contains('empty: false'));
         });
 
-        test('should produce readable output for empty state', () {
+        test('should produce readable output for VoidSuccessOperation', () {
           const state = SuccessOperation<String>.empty(message: 'deleted');
 
-          // Should not throw and should be readable
           final str = state.toString();
+          expect(str, contains('VoidSuccessOperation'));
           expect(str, contains('deleted'));
-          expect(str, contains('empty: true'));
-          expect(str, contains('null'));
         });
       });
     });
@@ -299,7 +282,8 @@ void main() {
               LoadingOperation(data: null) => 'Initial loading',
               LoadingOperation(:var data?) =>
                 'Reloading with cached data: ${data.value}',
-              SuccessOperation(:var data) => 'Success: ${data.value}',
+              VoidSuccessOperation(:var message) => 'Empty success: $message',
+              ValueSuccessOperation(:var data) => 'Success: ${data.value}',
               ErrorOperation(:var message, data: null) => 'Error: $message',
               ErrorOperation(:var message, :var data?) =>
                 'Error: $message (showing cached: ${data.value})',
@@ -333,8 +317,8 @@ void main() {
         final descriptions = operations
             .map(
               (op) => switch (op) {
-                SuccessOperation(empty: true) => 'Empty success',
-                SuccessOperation(:var data) => 'Success with data: $data',
+                VoidSuccessOperation() => 'Empty success',
+                ValueSuccessOperation(:var data) => 'Success with data: $data',
                 _ => 'Other state',
               },
             )
@@ -378,6 +362,183 @@ void main() {
         expect(a, isNot(equals(b)));
         expect(a.hashCode, isNot(equals(b.hashCode)));
       });
+
+      test('ValueSuccessOperation and VoidSuccessOperation should differ', () {
+        const value = SuccessOperation<String?>(data: null);
+        const void_ = SuccessOperation<String?>.empty();
+
+        expect(value, isNot(equals(void_)));
+        expect(value.hashCode, isNot(equals(void_.hashCode)));
+      });
+
+      test('LoadingOperation and IdleOperation should differ', () {
+        const loading = LoadingOperation<TestData>();
+        const idle = IdleOperation<TestData>();
+
+        expect(loading, isNot(equals(idle)));
+        expect(loading.hashCode, isNot(equals(idle.hashCode)));
+      });
+
+      test('hashCode is stable across multiple calls', () {
+        const state = SuccessOperation<TestData>(data: TestData('stable'));
+        expect(state.hashCode, equals(state.hashCode));
+      });
+
+      test('equal ErrorOperations have same hashCode', () {
+        final exception = Exception('Test');
+        final state1 = ErrorOperation<TestData>(
+          message: 'err',
+          exception: exception,
+        );
+        final state2 = ErrorOperation<TestData>(
+          message: 'err',
+          exception: exception,
+        );
+
+        expect(state1, equals(state2));
+        expect(state1.hashCode, equals(state2.hashCode));
+      });
+
+      test('equal IdleOperations have same hashCode', () {
+        const idle1 = IdleOperation<TestData>(data: TestData('x'));
+        const idle2 = IdleOperation<TestData>(data: TestData('x'));
+
+        expect(idle1, equals(idle2));
+        expect(idle1.hashCode, equals(idle2.hashCode));
+      });
+    });
+
+    group('Cross-type inequality', () {
+      test('different state types are never equal', () {
+        const loading = LoadingOperation<String>(data: 'x');
+        const idle = IdleOperation<String>(data: 'x');
+        const success = SuccessOperation<String>(data: 'x');
+        const error = ErrorOperation<String>(data: 'x');
+
+        // Loading vs others
+        expect(loading, isNot(equals(idle)));
+        expect(loading, isNot(equals(success)));
+        expect(loading, isNot(equals(error)));
+
+        // Idle vs others
+        expect(idle, isNot(equals(success)));
+        expect(idle, isNot(equals(error)));
+
+        // Success vs Error
+        expect(success, isNot(equals(error)));
+      });
+    });
+
+    group('Reflexive equality', () {
+      test('each state type is equal to itself', () {
+        final loading = LoadingOperation<String>(data: 'x');
+        final idle = IdleOperation<String>(data: 'x');
+        final success = ValueSuccessOperation<String>(data: 'x');
+        final void_ = VoidSuccessOperation<String>();
+        final error = ErrorOperation<String>(message: 'err');
+
+        expect(loading, equals(loading));
+        expect(idle, equals(idle));
+        expect(success, equals(success));
+        expect(void_, equals(void_));
+        expect(error, equals(error));
+      });
+    });
+
+    group('Const canonicalization', () {
+      test('identical const instances are the same object', () {
+        expect(
+          identical(
+            const LoadingOperation<String>(),
+            const LoadingOperation<String>(),
+          ),
+          isTrue,
+        );
+        expect(
+          identical(
+            const IdleOperation<String>(),
+            const IdleOperation<String>(),
+          ),
+          isTrue,
+        );
+        expect(
+          identical(
+            const ValueSuccessOperation<String>(data: 'x'),
+            const ValueSuccessOperation<String>(data: 'x'),
+          ),
+          isTrue,
+        );
+        expect(
+          identical(
+            const VoidSuccessOperation<String>(),
+            const VoidSuccessOperation<String>(),
+          ),
+          isTrue,
+        );
+        expect(
+          identical(
+            const ErrorOperation<String>(message: 'e'),
+            const ErrorOperation<String>(message: 'e'),
+          ),
+          isTrue,
+        );
+      });
+    });
+
+    group('toString', () {
+      test('LoadingOperation includes class name and data', () {
+        const state = LoadingOperation<String>(data: 'cached');
+        expect(state.toString(), contains('LoadingOperation'));
+        expect(state.toString(), contains('cached'));
+      });
+
+      test('IdleOperation includes class name and data', () {
+        const state = IdleOperation<String>(data: 'cached');
+        expect(state.toString(), contains('IdleOperation'));
+        expect(state.toString(), contains('cached'));
+      });
+
+      test('ErrorOperation includes class name and all fields', () {
+        final state = ErrorOperation<String>(
+          message: 'fail',
+          exception: Exception('boom'),
+          data: 'cached',
+        );
+        expect(state.toString(), contains('ErrorOperation'));
+        expect(state.toString(), contains('fail'));
+        expect(state.toString(), contains('boom'));
+        expect(state.toString(), contains('cached'));
+      });
+
+      test('LoadingOperation with null data does not throw', () {
+        const state = LoadingOperation<String>();
+        expect(state.toString(), contains('null'));
+      });
+
+      test('ErrorOperation with all nulls does not throw', () {
+        const state = ErrorOperation<String>();
+        expect(state.toString(), isNotEmpty);
+      });
+    });
+
+    group('Edge cases', () {
+      test('hasData is true for empty list (non-null)', () {
+        const state = SuccessOperation<List<String>>(data: []);
+        expect(state.hasData, isTrue);
+        expect(state.hasNoData, isFalse);
+      });
+
+      test(
+        'nullable T: SuccessOperation(data: null) differs from .empty()',
+        () {
+          const withNull = SuccessOperation<String?>(data: null);
+          const empty = SuccessOperation<String?>.empty();
+
+          expect(withNull, isA<ValueSuccessOperation<String?>>());
+          expect(empty, isA<VoidSuccessOperation<String?>>());
+          expect(withNull, isNot(equals(empty)));
+        },
+      );
     });
   });
 }

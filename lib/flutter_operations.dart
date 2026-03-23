@@ -6,9 +6,9 @@
 /// * [AsyncOperationMixin]: For one-shot operations.
 /// * [StreamOperationMixin]: For continuous streams.
 ///
-/// Both mixins expose the same four runtime states via [OperationState]:
-/// `IdleOperation`, `LoadingOperation`, `SuccessOperation`, and
-/// `ErrorOperation`.
+/// Both mixins expose the same runtime states via [OperationState]:
+/// `IdleOperation`, `LoadingOperation`, `SuccessOperation`
+/// (`ValueSuccessOperation` / `VoidSuccessOperation`), and `ErrorOperation`.
 library;
 
 export 'src/async_operation_mixin.dart';

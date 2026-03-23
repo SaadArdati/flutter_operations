@@ -1,6 +1,6 @@
 /// Represents the state of an asynchronous operation.
 ///
-/// Four runtime variants exist and can be matched exhaustively with Dart 3's
+/// Four primary variants exist and can be matched exhaustively with Dart 3's
 /// sealed classes:
 /// * **[IdleOperation]**: _Ready_ but **not-loading** state. This only
 ///   appears when `loadOnInit / listenOnInit` is set to `false` **or** when
@@ -8,9 +8,12 @@
 /// * **[LoadingOperation]**: Operation in progress (optionally with cached
 ///   data). `IdleOperation` extends this class so a single pattern can cover
 ///   both cases when the extra distinction is not important.
-/// * **[SuccessOperation]**: Operation finished successfully. Use
-///   `SuccessOperation.empty()` for "successful but no data" scenarios, then
-///   check the `empty` flag.
+/// * **[SuccessOperation]**: Operation finished successfully. Two subtypes
+///   offer opt-in specificity (like [IdleOperation] / [LoadingOperation]):
+///   * **[ValueSuccessOperation]**: Carries non-null data (`T`).
+///   * **[VoidSuccessOperation]**: No data (delete, fire-and-forget, etc.).
+///   Matching [SuccessOperation] covers both; match the subtypes for
+///   type-safe access.
 /// * **[ErrorOperation]**: Operation failed. Cached data from a previous
 ///   success is preserved when available for graceful degradation.
 ///
@@ -20,7 +23,8 @@
 ///   IdleOperation() => const Text('Ready'),
 ///   LoadingOperation(data: null) => const CircularProgressIndicator(),
 ///   LoadingOperation(:var data?) => Stack(children:[DataView(data), const LinearProgressIndicator()]),
-///   SuccessOperation(:var data) => DataView(data),
+///   VoidSuccessOperation(:var message) => Text(message ?? 'Done!'),
+///   ValueSuccessOperation(:var data) => DataView(data),
 ///   ErrorOperation(:var message, data: null) => ErrorBanner(message),
 ///   ErrorOperation(:var message, :var data?) => Stack(children:[DataView(data), ErrorBanner(message)]),
 /// }
@@ -34,13 +38,6 @@ sealed class OperationState<T> {
 
   /// The data associated with the operation, if any.
   T? get data => _data;
-
-  /// The data associated with the operation, if any.
-  ///
-  /// Unlike [SuccessOperation.data], this getter never throws. It returns
-  /// `null` for [SuccessOperation.empty] states instead of throwing
-  /// [StateError], making it safe for unconditional access across all states.
-  T? get dataOrNull => _data;
 
   /// Whether this state has associated data.
   bool get hasData => _data != null;
@@ -92,7 +89,7 @@ base class LoadingOperation<T> extends OperationState<T> {
   }
 
   @override
-  int get hashCode => data.hashCode;
+  int get hashCode => Object.hash(runtimeType, data);
 
   @override
   String toString() => 'LoadingOperation(data: $data)';
@@ -108,67 +105,108 @@ final class IdleOperation<T> extends LoadingOperation<T> {
   String toString() => 'IdleOperation(data: $data)';
 }
 
-/// Represents a successfully completed operation with associated data.
-/// The data is guaranteed to be non-null in this state unless created with
-/// [SuccessOperation.empty].
+/// Represents a successfully completed operation.
 ///
-/// Note on nullable types: When `T` is itself nullable
-/// (e.g., `SuccessOperation<String?>`), creating
-/// `SuccessOperation<String?>(data: null)` is allowed but `empty` will be
-/// `false`. The [data] getter will return `null` through the cast without
-/// throwing. If this is not the intended behavior, use
-/// [SuccessOperation.empty] instead.
-final class SuccessOperation<T> extends OperationState<T> {
+/// This is the catch-all base type. Matching `case SuccessOperation()` in a
+/// switch covers all success variants — but [data] returns `T?` because it
+/// might be a [VoidSuccessOperation].
+///
+/// For type-safe access, match the subtypes instead:
+/// * **[ValueSuccessOperation]**: Guarantees non-null [data] (`T`).
+/// * **[VoidSuccessOperation]**: No data (delete, fire-and-forget, etc.).
+///
+/// This mirrors the [IdleOperation] / [LoadingOperation] pattern: you can
+/// match the broad parent or the specific children — your choice.
+///
+/// ```dart
+/// // Option 1: Broad match (data is T?, you handle nullability)
+/// case SuccessOperation(:var data) => ...
+///
+/// // Option 2: Specific matches (compiler-guaranteed safety)
+/// case VoidSuccessOperation(:var message) => Text(message ?? 'Done!'),
+/// case ValueSuccessOperation(:var data) => DataView(data), // data is T
+/// ```
+///
+/// Construction is backwards-compatible:
+/// * `SuccessOperation(data: x)` creates a [ValueSuccessOperation].
+/// * `SuccessOperation.empty()` creates a [VoidSuccessOperation].
+sealed class SuccessOperation<T> extends OperationState<T> {
   /// Creates a success state with the operation's result data.
-  const SuccessOperation({required T super.data, this.message}) : empty = false;
-
-  /// Creates an empty success state, indicating the operation completed
-  /// successfully but returned no data.
   ///
-  /// Use this for operations that succeed but have no meaningful return value,
-  /// such as delete operations or fire-and-forget actions.
-  const SuccessOperation.empty({this.message})
-    : empty = true,
-      super(data: null);
+  /// This is a redirecting factory — the runtime type is
+  /// [ValueSuccessOperation].
+  const factory SuccessOperation({required T data, String? message}) =
+      ValueSuccessOperation<T>;
+
+  /// Creates an empty success state with no data.
+  ///
+  /// This is a redirecting factory — the runtime type is
+  /// [VoidSuccessOperation].
+  const factory SuccessOperation.empty({String? message}) =
+      VoidSuccessOperation<T>;
+
+  /// Internal generative constructor for subtypes.
+  const SuccessOperation._({super.data, this.message});
 
   /// Whether the operation completed successfully but returned no data.
-  final bool empty;
+  ///
+  /// Equivalent to `this is VoidSuccessOperation`.
+  bool get empty => this is VoidSuccessOperation<T>;
 
   /// An optional message associated with the successful operation.
-  /// An example would be a server sending a success confirmation with
-  /// specific details in the message, separate from the main data payload.
   final String? message;
-
-  /// The data associated with the successful operation.
-  ///
-  /// Throws [StateError] if this is an empty operation. Use [dataOrNull] or
-  /// check the [empty] flag first for empty operations.
-  @override
-  T get data {
-    if (empty) {
-      throw StateError(
-        'No data available in an empty operation. '
-        'Use dataOrNull or check the empty flag first.',
-      );
-    }
-    return _data as T;
-  }
 
   @override
   bool operator ==(Object other) {
     if (identical(this, other)) return true;
-    return other is SuccessOperation<T> &&
+    return other.runtimeType == runtimeType &&
+        other is SuccessOperation<T> &&
         other._data == _data &&
-        other.message == message &&
-        other.empty == empty;
+        other.message == message;
   }
 
   @override
-  int get hashCode => Object.hash(_data, message, empty);
+  int get hashCode => Object.hash(runtimeType, _data, message);
 
   @override
-  String toString() =>
-      'SuccessOperation(data: $_data, message: $message, empty: $empty)';
+  String toString() => 'SuccessOperation(data: $_data, message: $message)';
+}
+
+/// A [SuccessOperation] that carries non-null result data.
+///
+/// The [data] getter returns `T` (non-nullable), guaranteed safe.
+final class ValueSuccessOperation<T> extends SuccessOperation<T> {
+  /// Creates a success state with the operation's result data.
+  const ValueSuccessOperation({required T super.data, super.message})
+    : super._();
+
+  /// The data associated with the successful operation.
+  ///
+  /// Guaranteed non-null — safe to use without null checks.
+  @override
+  T get data => _data as T;
+
+  @override
+  String toString() => 'ValueSuccessOperation(data: $data, message: $message)';
+}
+
+/// A [SuccessOperation] that carries no data.
+///
+/// Use for operations like delete, logout, or fire-and-forget actions.
+///
+/// ```dart
+/// switch (state) {
+///   VoidSuccessOperation(:var message) => Text(message ?? 'Done!'),
+///   ValueSuccessOperation(:var data) => DataView(data),
+///   // ...
+/// }
+/// ```
+final class VoidSuccessOperation<T> extends SuccessOperation<T> {
+  /// Creates an empty success state with an optional message.
+  const VoidSuccessOperation({super.message}) : super._();
+
+  @override
+  String toString() => 'VoidSuccessOperation(message: $message)';
 }
 
 /// Represents a failed operation with error details.
@@ -194,7 +232,8 @@ final class ErrorOperation<T> extends OperationState<T> {
   @override
   bool operator ==(Object other) {
     if (identical(this, other)) return true;
-    return other is ErrorOperation<T> &&
+    return other.runtimeType == runtimeType &&
+        other is ErrorOperation<T> &&
         other.message == message &&
         other.exception == exception &&
         other.stackTrace == stackTrace &&
@@ -202,7 +241,8 @@ final class ErrorOperation<T> extends OperationState<T> {
   }
 
   @override
-  int get hashCode => Object.hash(message, exception, stackTrace, data);
+  int get hashCode =>
+      Object.hash(runtimeType, message, exception, stackTrace, data);
 
   @override
   String toString() =>

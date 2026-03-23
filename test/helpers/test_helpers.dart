@@ -242,7 +242,8 @@ class _MockAsyncWidgetState extends State<MockAsyncWidget>
                   LoadingOperation(:var data?) => Text(
                     'Loading with ${data.value}',
                   ),
-                  SuccessOperation(:var data) => Text(
+                  VoidSuccessOperation() => const Text('Success (empty)'),
+                  ValueSuccessOperation(:var data) => Text(
                     'Success: ${data.value}',
                     softWrap: true,
                     overflow: TextOverflow.visible,
@@ -386,7 +387,8 @@ class _MockStreamWidgetState extends State<MockStreamWidget>
                   LoadingOperation(:var data?) => Text(
                     'Loading with ${data.value}',
                   ),
-                  SuccessOperation(:var data) => Text(
+                  VoidSuccessOperation() => const Text('Success (empty)'),
+                  ValueSuccessOperation(:var data) => Text(
                     'Success: ${data.value}',
                     softWrap: true,
                     overflow: TextOverflow.visible,
@@ -450,7 +452,8 @@ Widget createValueListenableWidget(
             IdleOperation(:var data?) => Text('Idle with ${data.value}'),
             LoadingOperation(data: null) => const Text('Loading'),
             LoadingOperation(:var data?) => Text('Loading with ${data.value}'),
-            SuccessOperation(:var data) => Text('Success: ${data.value}'),
+            VoidSuccessOperation() => const Text('Success (empty)'),
+            ValueSuccessOperation(:var data) => Text('Success: ${data.value}'),
             ErrorOperation(:var message, data: null) => Text('Error: $message'),
             ErrorOperation(:var message, :var data?) => Text(
               'Error: $message with ${data.value}',
@@ -516,6 +519,17 @@ final List<StateTestCase<TestData>> commonStateTestCases = [
       isSuccess: true,
       isError: false,
       hasData: true,
+    ),
+  ),
+  StateTestCase(
+    name: 'VoidSuccessOperation without data',
+    state: const SuccessOperation<TestData>.empty(),
+    expected: const StateProperties(
+      isLoading: false,
+      isIdle: false,
+      isSuccess: true,
+      isError: false,
+      hasData: false,
     ),
   ),
   StateTestCase(

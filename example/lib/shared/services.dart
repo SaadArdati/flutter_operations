@@ -63,13 +63,26 @@ class MockApiService {
     }
 
     final allProducts = Product.examples();
-    // Pick a random subset of products to simulate search results
-    final filteredProducts = [
+    return [
       for (final product in allProducts)
-        if (_random.nextBool()) product,
+        if (product.name.toLowerCase().contains(query.toLowerCase()) ||
+            product.category.toLowerCase().contains(query.toLowerCase()))
+          product,
     ];
+  }
 
-    return filteredProducts;
+  static Future<void> deleteItem(String id) async {
+    await Future.delayed(Duration(milliseconds: 500 + _random.nextInt(500)));
+    if (_random.nextDouble() < 0.15) {
+      throw Exception('Failed to delete item');
+    }
+  }
+
+  static Future<void> submitFeedback(String feedback) async {
+    await Future.delayed(Duration(milliseconds: 400 + _random.nextInt(600)));
+    if (_random.nextDouble() < 0.1) {
+      throw Exception('Failed to submit feedback');
+    }
   }
 }
 

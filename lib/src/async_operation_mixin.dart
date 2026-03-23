@@ -221,6 +221,23 @@ mixin AsyncOperationMixin<T, K extends StatefulWidget> on State<K> {
     if (mounted && globalRefresh) setState(() {});
   }
 
+  /// Updates the state to an empty success ([VoidSuccessOperation]).
+  ///
+  /// Use this for operations that complete successfully but produce no data,
+  /// such as delete, logout, or fire-and-forget actions.
+  void setEmpty({String? message}) {
+    if (operationNotifier.value case VoidSuccessOperation(
+      message: final oldMessage,
+    ) when oldMessage == message) {
+      return;
+    }
+
+    operationNotifier.value = SuccessOperation<T>.empty(message: message);
+    onEmpty(message);
+
+    if (mounted && globalRefresh) setState(() {});
+  }
+
   /// Updates the state to error with the provided exception details.
   void setError(
     Object exception,
@@ -263,6 +280,10 @@ mixin AsyncOperationMixin<T, K extends StatefulWidget> on State<K> {
 
   /// Called when data is successfully loaded. Override for custom handling.
   void onSuccess(T data) {}
+
+  /// Called when an empty success ([VoidSuccessOperation]) is emitted.
+  /// Override for custom handling.
+  void onEmpty(String? message) {}
 
   /// Called when the state transitions to loading. Override for custom handling.
   void onLoading() {}
