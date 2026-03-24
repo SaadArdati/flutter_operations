@@ -58,11 +58,9 @@ class MockApiService {
       throw Exception('Search failed - network error');
     }
 
-    if (query.isEmpty) {
-      return [];
-    }
-
     final allProducts = Product.examples();
+    if (query.isEmpty) return allProducts;
+
     return [
       for (final product in allProducts)
         if (product.name.toLowerCase().contains(query.toLowerCase()) ||

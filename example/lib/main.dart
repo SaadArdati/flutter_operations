@@ -551,12 +551,7 @@ class _SearchExampleState extends State<SearchExample>
   Future<List<Product>> fetch() => MockApiService.searchProducts(_query);
 
   void _search() {
-    final q = _controller.text.trim();
-    if (q.isEmpty) {
-      setIdle();
-      return;
-    }
-    _query = q;
+    _query = _controller.text.trim();
     load();
   }
 
@@ -577,7 +572,7 @@ class _SearchExampleState extends State<SearchExample>
                     // isNotLoading disables input during search.
                     enabled: operation.isNotLoading,
                     decoration: const InputDecoration(
-                      hintText: 'Search products...',
+                      hintText: 'Try "Product", "Electronics", "Books"...',
                       border: OutlineInputBorder(),
                       prefixIcon: Icon(Icons.search),
                     ),
