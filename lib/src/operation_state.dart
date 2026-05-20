@@ -2,16 +2,18 @@
 ///
 /// Four runtime variants exist and can be matched exhaustively with Dart 3's
 /// sealed classes:
-/// * **[IdleOperation]**: _Ready_ but **not-loading** state. This only
-///   appears when `loadOnInit / listenOnInit` is set to `false` **or** when
+/// * [IdleOperation]: _Ready_ but not-loading state. This only
+///   appears when `loadOnInit / listenOnInit` is set to `false` or when
 ///   `setIdle()` is called manually. It can still carry cached data.
-/// * **[LoadingOperation]**: Operation in progress (optionally with cached
+/// * [LoadingOperation]: Operation in progress (optionally with cached
 ///   data). `IdleOperation` extends this class so a single pattern can cover
 ///   both cases when the extra distinction is not important.
-/// * **[SuccessOperation]**: Operation finished successfully. Use
-///   `SuccessOperation.empty()` for "successful but no data" scenarios, then
-///   check the `empty` flag.
-/// * **[ErrorOperation]**: Operation failed. Cached data from a previous
+/// * [SuccessOperation]: Operation finished successfully. The [data]
+///   getter returns exactly `T`: non-null when `T` is non-nullable, nullable
+///   when `T` is nullable. For operations that succeed without a meaningful
+///   value (delete, logout, fire-and-forget), parameterize with `void` or a
+///   nullable type.
+/// * [ErrorOperation]: Operation failed. Cached data from a previous
 ///   success is preserved when available for graceful degradation.
 ///
 /// These variants unlock expressive and compile-time-checked UI code like:
@@ -35,11 +37,13 @@ sealed class OperationState<T> {
   /// The data associated with the operation, if any.
   T? get data => _data;
 
-  /// The data associated with the operation, if any.
+  /// The data associated with the operation, as a nullable `T?`.
   ///
-  /// Unlike [SuccessOperation.data], this getter never throws. It returns
-  /// `null` for [SuccessOperation.empty] states instead of throwing
-  /// [StateError], making it safe for unconditional access across all states.
+  /// Equivalent to [data] for [LoadingOperation], [IdleOperation], and
+  /// [ErrorOperation], all of which already expose nullable data. For
+  /// [SuccessOperation], this is [SuccessOperation.data] widened to `T?`,
+  /// which is convenient when handling all states uniformly without pattern
+  /// matching.
   T? get dataOrNull => _data;
 
   /// Whether this state has associated data.
@@ -92,7 +96,7 @@ base class LoadingOperation<T> extends OperationState<T> {
   }
 
   @override
-  int get hashCode => data.hashCode;
+  int get hashCode => Object.hash(runtimeType, data);
 
   @override
   String toString() => 'LoadingOperation(data: $data)';
@@ -109,66 +113,56 @@ final class IdleOperation<T> extends LoadingOperation<T> {
 }
 
 /// Represents a successfully completed operation with associated data.
-/// The data is guaranteed to be non-null in this state unless created with
-/// [SuccessOperation.empty].
 ///
-/// Note on nullable types: When `T` is itself nullable
-/// (e.g., `SuccessOperation<String?>`), creating
-/// `SuccessOperation<String?>(data: null)` is allowed but `empty` will be
-/// `false`. The [data] getter will return `null` through the cast without
-/// throwing. If this is not the intended behavior, use
-/// [SuccessOperation.empty] instead.
+/// The [data] getter returns exactly `T`: non-null when `T` is non-nullable,
+/// nullable when `T` is nullable. The constructor enforces this at the call
+/// site: `SuccessOperation<User>(data: null)` is a compile error, while
+/// `SuccessOperation<User?>(data: null)` is allowed.
+///
+/// ## "Successful but no data"
+///
+/// Pick the type parameter that matches what the operation actually models:
+///
+/// ```dart
+/// // Fire-and-forget mutations (delete, logout, PIN confirm):
+/// class DeleteCubit extends Cubit<OperationState<void>> { ... }
+///
+/// // Successful but the value may legitimately be absent:
+/// class CurrentUserCubit extends Cubit<OperationState<User?>> { ... }
+/// ```
 final class SuccessOperation<T> extends OperationState<T> {
   /// Creates a success state with the operation's result data.
-  const SuccessOperation({required T super.data, this.message}) : empty = false;
-
-  /// Creates an empty success state, indicating the operation completed
-  /// successfully but returned no data.
   ///
-  /// Use this for operations that succeed but have no meaningful return value,
-  /// such as delete operations or fire-and-forget actions.
-  const SuccessOperation.empty({this.message})
-    : empty = true,
-      super(data: null);
-
-  /// Whether the operation completed successfully but returned no data.
-  final bool empty;
+  /// `data` must satisfy `T`. For non-nullable `T`, passing `null` is a
+  /// compile-time error. For nullable `T` (e.g. `SuccessOperation<User?>`),
+  /// `null` is allowed.
+  const SuccessOperation({required T super.data, this.message});
 
   /// An optional message associated with the successful operation.
-  /// An example would be a server sending a success confirmation with
-  /// specific details in the message, separate from the main data payload.
+  ///
+  /// Useful when a server returns a confirmation message alongside the
+  /// payload (e.g. `{ "data": ..., "message": "Saved" }`).
   final String? message;
 
   /// The data associated with the successful operation.
   ///
-  /// Throws [StateError] if this is an empty operation. Use [dataOrNull] or
-  /// check the [empty] flag first for empty operations.
+  /// Returns exactly `T`, mirroring the type parameter. Never throws.
   @override
-  T get data {
-    if (empty) {
-      throw StateError(
-        'No data available in an empty operation. '
-        'Use dataOrNull or check the empty flag first.',
-      );
-    }
-    return _data as T;
-  }
+  T get data => _data as T;
 
   @override
   bool operator ==(Object other) {
     if (identical(this, other)) return true;
     return other is SuccessOperation<T> &&
         other._data == _data &&
-        other.message == message &&
-        other.empty == empty;
+        other.message == message;
   }
 
   @override
-  int get hashCode => Object.hash(_data, message, empty);
+  int get hashCode => Object.hash(_data, message);
 
   @override
-  String toString() =>
-      'SuccessOperation(data: $_data, message: $message, empty: $empty)';
+  String toString() => 'SuccessOperation(data: $_data, message: $message)';
 }
 
 /// Represents a failed operation with error details.

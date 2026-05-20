@@ -22,7 +22,7 @@ class _NotImplementedException implements Exception {
 /// Handles continuous data streams with automatic subscription management,
 /// state transitions, and proper cleanup. Unlike [AsyncOperationMixin] which
 /// deals with one-off operations, this mixin is built for sources that emit
-/// **multiple** values over time (e.g. WebSockets, database listeners).
+/// multiple values over time (e.g. WebSockets, database listeners).
 ///
 /// Example:
 /// ```dart
@@ -140,9 +140,8 @@ mixin StreamOperationMixin<T, K extends StatefulWidget> on State<K> {
           // stream() was not overridden, use streamWithMessage
           _streamSubscription = streamWithMsg.listen(
             (result) {
-              if (_generation == currentGeneration) {
-                setData(result.$1, message: result.$2);
-              }
+              if (!mounted || _generation != currentGeneration) return;
+              setData(result.$1, message: result.$2);
             },
             onError: (exception, stackTrace) {
               if (!mounted || _generation != currentGeneration) return;
@@ -163,9 +162,8 @@ mixin StreamOperationMixin<T, K extends StatefulWidget> on State<K> {
       // streamWithMessage() was not overridden, use stream()
       _streamSubscription = stream().listen(
         (value) {
-          if (_generation == currentGeneration) {
-            setData(value);
-          }
+          if (!mounted || _generation != currentGeneration) return;
+          setData(value);
         },
         onError: (exception, stackTrace) {
           if (!mounted || _generation != currentGeneration) return;

@@ -19,8 +19,8 @@ class _NotImplementedException implements Exception {
 
 /// A mixin that adds asynchronous state management to a [StatefulWidget].
 ///
-/// Handles one-time asynchronous operations with **idle**, **loading**,
-/// **success**, and **error** states.
+/// Handles one-time asynchronous operations with idle, loading,
+/// success, and error states.
 /// Unlike [StreamOperationMixin], which is intended for infinite data streams, this
 /// mixin is perfect for discrete fetch operations that have a clear start and
 /// end (e.g. HTTP requests, database reads, dialogs).

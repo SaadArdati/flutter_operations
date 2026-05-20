@@ -57,52 +57,134 @@ void main() {
     });
 
     group('SuccessOperation', () {
-      test('should guarantee non-null data for non-empty state', () {
+      test('returns exactly T for non-nullable T', () {
         const state = SuccessOperation<TestData>(data: TestData('test'));
-        TestData data = state.data;
+        final TestData data = state.data;
 
         expect(data.value, equals('test'));
-        expect(state.empty, isFalse);
         expect(state.hasData, isTrue);
+        expect(state.isSuccess, isTrue);
       });
 
-      test('should handle empty success state correctly', () {
-        const emptySuccess = SuccessOperation<TestData?>.empty();
-        const regularSuccess = SuccessOperation<TestData>(
+      test('returns T? for nullable T and data may be null', () {
+        const withValue = SuccessOperation<TestData?>(data: TestData('x'));
+        const withNull = SuccessOperation<TestData?>(data: null);
+
+        expect(withValue.data?.value, equals('x'));
+        expect(withValue.hasData, isTrue);
+
+        expect(withNull.data, isNull);
+        expect(withNull.hasData, isFalse);
+        expect(withNull.isSuccess, isTrue);
+      });
+
+      test('data getter never throws', () {
+        const state = SuccessOperation<TestData?>(data: null);
+        expect(() => state.data, returnsNormally);
+      });
+
+      test('equality is determined by data and message', () {
+        const s1 = SuccessOperation<TestData>(data: TestData('test'));
+        const s2 = SuccessOperation<TestData>(data: TestData('test'));
+        const s3 = SuccessOperation<TestData>(data: TestData('other'));
+        const s4 = SuccessOperation<TestData>(
           data: TestData('test'),
+          message: 'fetched',
         );
 
-        expect(emptySuccess.empty, isTrue);
-        expect(emptySuccess.isSuccess, isTrue);
-        expect(emptySuccess.hasData, isFalse);
-        expect(emptySuccess.hasNoData, isTrue);
-
-        expect(regularSuccess.empty, isFalse);
-        expect(regularSuccess.isSuccess, isTrue);
-        expect(regularSuccess.hasData, isTrue);
-        expect(regularSuccess.data.value, equals('test'));
+        expect(s1, equals(s2));
+        expect(s1, isNot(equals(s3)));
+        expect(s1, isNot(equals(s4)));
       });
 
-      test('should throw StateError when accessing data in empty state', () {
-        const state = SuccessOperation<String>.empty();
-        expect(() => state.data, throwsA(isA<StateError>()));
+      test('nullable-T null instances compare and hash equally', () {
+        const n1 = SuccessOperation<TestData?>(data: null);
+        const n2 = SuccessOperation<TestData?>(data: null);
+        const n3 = SuccessOperation<TestData?>(data: null, message: 'done');
+
+        expect(n1, equals(n2));
+        expect(n1.hashCode, equals(n2.hashCode));
+        expect(n1, isNot(equals(n3)));
       });
 
-      test('should handle equality correctly', () {
-        const state1 = SuccessOperation<TestData>(data: TestData('test'));
-        const state2 = SuccessOperation<TestData>(data: TestData('test'));
-        const state3 = SuccessOperation<TestData>(data: TestData('other'));
-        const state4 = SuccessOperation<TestData?>.empty();
-        const state5 = SuccessOperation<TestData?>.empty();
+      test('works correctly as set and map key', () {
+        const a = SuccessOperation<String?>(data: null);
+        const b = SuccessOperation<String?>(data: null);
+        const c = SuccessOperation<String?>(data: 'x');
 
-        expect(state1, equals(state2));
-        expect(state1, isNot(equals(state3)));
-        expect(state4, equals(state5));
-        expect(state1, isNot(equals(state4)));
+        final set = <SuccessOperation<String?>>{}
+          ..add(a)
+          ..add(b)
+          ..add(c);
+        expect(set.length, equals(2));
+
+        final map = <SuccessOperation<String?>, String>{}
+          ..[a] = 'first'
+          ..[b] = 'second'
+          ..[c] = 'third';
+        expect(map.length, equals(2));
+        expect(map[a], equals('second'));
+      });
+
+      test('toString includes data and message', () {
+        const s = SuccessOperation<String>(data: 'hello', message: 'fetched');
+
+        expect(s.toString(), contains('hello'));
+        expect(s.toString(), contains('fetched'));
+      });
+
+      group('void parameter (fire-and-forget)', () {
+        test('constructs without throwing and matches in switch', () {
+          const state = SuccessOperation<void>(data: null);
+
+          expect(state.isSuccess, isTrue);
+          expect(() => state.data, returnsNormally);
+
+          final OperationState<void> typed = state;
+          final description = switch (typed) {
+            IdleOperation() => 'idle',
+            LoadingOperation() => 'loading',
+            SuccessOperation() => 'done',
+            ErrorOperation() => 'error',
+          };
+          expect(description, equals('done'));
+        });
+
+        test('equality and hashCode work for void instances', () {
+          const a = SuccessOperation<void>(data: null);
+          const b = SuccessOperation<void>(data: null);
+          const c = SuccessOperation<void>(data: null, message: 'completed');
+
+          expect(a, equals(b));
+          expect(a.hashCode, equals(b.hashCode));
+          expect(a, isNot(equals(c)));
+        });
+
+        test('flows through OperationState<void> as a sealed match', () {
+          final states = <OperationState<void>>[
+            const IdleOperation<void>(),
+            const LoadingOperation<void>(),
+            const SuccessOperation<void>(data: null),
+            const ErrorOperation<void>(message: 'boom'),
+          ];
+
+          final labels = states
+              .map(
+                (s) => switch (s) {
+                  IdleOperation() => 'i',
+                  LoadingOperation() => 'l',
+                  SuccessOperation() => 's',
+                  ErrorOperation() => 'e',
+                },
+              )
+              .toList();
+
+          expect(labels, equals(['i', 'l', 's', 'e']));
+        });
       });
 
       group('dataOrNull', () {
-        test('should return data for non-empty success state', () {
+        test('returns data when present', () {
           const state = SuccessOperation<TestData>(data: TestData('test'));
 
           expect(state.dataOrNull, isNotNull);
@@ -110,114 +192,24 @@ void main() {
           expect(state.dataOrNull, equals(state.data));
         });
 
-        test('should return null for empty success state', () {
-          const state = SuccessOperation<String>.empty();
+        test('returns null for SuccessOperation<T?>(data: null)', () {
+          const state = SuccessOperation<String?>(data: null);
 
           expect(state.dataOrNull, isNull);
-          expect(state.empty, isTrue);
         });
 
-        test('should allow safe access without checking empty flag', () {
-          const states = <SuccessOperation<String>>[
-            SuccessOperation<String>(data: 'hello'),
-            SuccessOperation<String>.empty(),
+        test('allows uniform safe access across success variants', () {
+          const states = <SuccessOperation<String?>>[
+            SuccessOperation<String?>(data: 'hello'),
+            SuccessOperation<String?>(data: null),
           ];
 
-          // This should not throw for either state
           final results = states
               .map((s) => s.dataOrNull?.toUpperCase())
               .toList();
 
           expect(results[0], equals('HELLO'));
           expect(results[1], isNull);
-        });
-      });
-
-      group('empty state equality and hashCode', () {
-        test('should compare empty states without throwing', () {
-          const empty1 = SuccessOperation<String>.empty();
-          const empty2 = SuccessOperation<String>.empty();
-          const empty3 = SuccessOperation<String>.empty(message: 'done');
-
-          // These comparisons should not throw
-          expect(empty1 == empty2, isTrue);
-          expect(empty1 == empty3, isFalse);
-          expect(empty1, equals(empty2));
-          expect(empty1, isNot(equals(empty3)));
-        });
-
-        test('should compute hashCode for empty states without throwing', () {
-          const empty1 = SuccessOperation<String>.empty();
-          const empty2 = SuccessOperation<String>.empty();
-          const empty3 = SuccessOperation<String>.empty(message: 'done');
-
-          // These should not throw
-          expect(empty1.hashCode, equals(empty2.hashCode));
-          expect(empty1.hashCode, isNot(equals(empty3.hashCode)));
-        });
-
-        test('should work correctly in Sets and Maps', () {
-          const empty1 = SuccessOperation<String>.empty();
-          const empty2 = SuccessOperation<String>.empty();
-          const withData = SuccessOperation<String>(data: 'test');
-
-          // Build set programmatically to test deduplication behavior
-          final set = <SuccessOperation<String>>{}
-            ..add(empty1)
-            ..add(empty2) // Should be deduplicated (equal to empty1)
-            ..add(withData);
-          expect(set.length, equals(2)); // empty1 and empty2 are equal
-
-          // Build map programmatically to test key deduplication
-          final map = <SuccessOperation<String>, String>{}
-            ..[empty1] = 'first'
-            ..[empty2] =
-                'second' // Should overwrite first (equal key)
-            ..[withData] = 'third';
-          expect(map.length, equals(2));
-          expect(map[empty1], equals('second'));
-        });
-      });
-
-      group('empty state with message', () {
-        test('should support optional message in empty state', () {
-          const state = SuccessOperation<String>.empty(message: 'Item deleted');
-
-          expect(state.empty, isTrue);
-          expect(state.message, equals('Item deleted'));
-          expect(state.dataOrNull, isNull);
-        });
-
-        test('should differentiate empty states by message', () {
-          const state1 = SuccessOperation<String>.empty();
-          const state2 = SuccessOperation<String>.empty(message: 'Done');
-          const state3 = SuccessOperation<String>.empty(message: 'Done');
-
-          expect(state1, isNot(equals(state2)));
-          expect(state2, equals(state3));
-        });
-      });
-
-      group('toString', () {
-        test('should produce readable output for non-empty state', () {
-          const state = SuccessOperation<String>(
-            data: 'hello',
-            message: 'fetched',
-          );
-
-          expect(state.toString(), contains('hello'));
-          expect(state.toString(), contains('fetched'));
-          expect(state.toString(), contains('empty: false'));
-        });
-
-        test('should produce readable output for empty state', () {
-          const state = SuccessOperation<String>.empty(message: 'deleted');
-
-          // Should not throw and should be readable
-          final str = state.toString();
-          expect(str, contains('deleted'));
-          expect(str, contains('empty: true'));
-          expect(str, contains('null'));
         });
       });
     });
@@ -324,23 +316,23 @@ void main() {
         },
       );
 
-      test('should handle pattern matching with empty success', () {
+      test('should handle pattern matching with nullable success data', () {
         final operations = <OperationState<String?>>[
-          const SuccessOperation<String?>.empty(),
+          const SuccessOperation<String?>(data: null),
           const SuccessOperation<String?>(data: 'data'),
         ];
 
         final descriptions = operations
             .map(
               (op) => switch (op) {
-                SuccessOperation(empty: true) => 'Empty success',
+                SuccessOperation(data: null) => 'Success with null data',
                 SuccessOperation(:var data) => 'Success with data: $data',
                 _ => 'Other state',
               },
             )
             .toList();
 
-        expect(descriptions[0], equals('Empty success'));
+        expect(descriptions[0], equals('Success with null data'));
         expect(descriptions[1], equals('Success with data: data'));
       });
     });
@@ -377,6 +369,212 @@ void main() {
 
         expect(a, isNot(equals(b)));
         expect(a.hashCode, isNot(equals(b.hashCode)));
+      });
+
+      test('Loading and Idle with same data are unequal and hash apart', () {
+        const loading = LoadingOperation<int>(data: 5);
+        const idle = IdleOperation<int>(data: 5);
+
+        expect(loading, isNot(equals(idle)));
+        expect(loading.hashCode, isNot(equals(idle.hashCode)));
+      });
+    });
+
+    group('Pattern matching variants', () {
+      // Showcases the different match styles supported by the sealed
+      // hierarchy. Each style is also documented in the README.
+
+      test('OperationState(:final data?) catches every data-bearing state', () {
+        // The data-presence pattern collapses across all four state
+        // types, so callers who only care about "is there data?" can
+        // skip per-state matching entirely.
+        final operations = <OperationState<String>>[
+          const LoadingOperation<String>(),
+          const LoadingOperation<String>(data: 'cached'),
+          const IdleOperation<String>(),
+          const IdleOperation<String>(data: 'cached'),
+          const SuccessOperation<String>(data: 'value'),
+          const ErrorOperation<String>(message: 'oops'),
+          const ErrorOperation<String>(message: 'oops', data: 'cached'),
+        ];
+
+        final labels = operations
+            .map(
+              (op) => switch (op) {
+                OperationState(:final data?) => 'data: $data',
+                OperationState() => 'no-data',
+              },
+            )
+            .toList();
+
+        expect(labels, [
+          'no-data',
+          'data: cached',
+          'no-data',
+          'data: cached',
+          'data: value',
+          'no-data',
+          'data: cached',
+        ]);
+      });
+
+      test(
+        'multi-pattern || combines data-bearing states across state types',
+        () {
+          // When you want different *renderers* per state but the same
+          // *handler* for the "has-data" arms, use the OR pattern.
+          final operations = <OperationState<String>>[
+            const LoadingOperation<String>(data: 'a'),
+            const SuccessOperation<String>(data: 'b'),
+            const ErrorOperation<String>(message: 'err', data: 'c'),
+            const LoadingOperation<String>(),
+          ];
+
+          final labels = operations
+              .map(
+                (op) => switch (op) {
+                  LoadingOperation(:final data?) ||
+                  SuccessOperation(:final data) ||
+                  ErrorOperation(:final data?) => 'show $data',
+                  _ => 'spinner',
+                },
+              )
+              .toList();
+
+          expect(labels, ['show a', 'show b', 'show c', 'spinner']);
+        },
+      );
+
+      test(
+        'error-first then data-presence keeps the error banner authoritative',
+        () {
+          // A common UI pattern: errors always win over cached data,
+          // even when the error itself carries cache. Match
+          // ErrorOperation first; the catch-all below picks up
+          // success and loading-with-cache.
+          final operations = <OperationState<int>>[
+            const LoadingOperation<int>(data: 1),
+            const ErrorOperation<int>(message: 'err', data: 2),
+            const SuccessOperation<int>(data: 3),
+            const IdleOperation<int>(),
+          ];
+
+          final labels = operations
+              .map(
+                (op) => switch (op) {
+                  ErrorOperation(:final message) => 'error: $message',
+                  OperationState(:final data?) => 'show $data',
+                  _ => 'loading',
+                },
+              )
+              .toList();
+
+          expect(labels, ['show 1', 'error: err', 'show 3', 'loading']);
+        },
+      );
+
+      test('guards (when) filter on data content', () {
+        // Guards let you branch on properties of the payload without
+        // unwrapping in the body.
+        final operations = <OperationState<List<int>>>[
+          const SuccessOperation<List<int>>(data: []),
+          const SuccessOperation<List<int>>(data: [1, 2, 3]),
+        ];
+
+        final labels = operations
+            .map(
+              (op) => switch (op) {
+                SuccessOperation(:final data) when data.isEmpty => 'empty list',
+                SuccessOperation(:final data) => '${data.length} items',
+                _ => 'other',
+              },
+            )
+            .toList();
+
+        expect(labels, ['empty list', '3 items']);
+      });
+
+      test(
+        'convenience getters offer an imperative alternative to patterns',
+        () {
+          // Patterns are not mandatory. For simple UI gates (e.g.
+          // "disable a button while loading"), the boolean getters are
+          // often clearer than a full switch.
+          const loading = LoadingOperation<int>(data: 5);
+          const success = SuccessOperation<int>(data: 7);
+          const error = ErrorOperation<int>(message: 'oops');
+          const idle = IdleOperation<int>();
+
+          expect(loading.isLoading, isTrue);
+          expect(loading.isSuccess, isFalse);
+          expect(loading.dataOrNull, equals(5));
+
+          expect(success.isSuccess, isTrue);
+          expect(success.hasData, isTrue);
+
+          expect(error.isError, isTrue);
+          expect(error.dataOrNull, isNull);
+
+          expect(idle.isIdle, isTrue);
+          expect(idle.isLoading, isFalse);
+        },
+      );
+
+      test(
+        'narrow patterns inside the same switch distinguish Idle from Loading',
+        () {
+          // IdleOperation extends LoadingOperation, so order matters:
+          // match IdleOperation first if you want to treat them
+          // differently. Otherwise LoadingOperation will subsume both.
+          final operations = <OperationState<String>>[
+            const IdleOperation<String>(),
+            const LoadingOperation<String>(),
+            const IdleOperation<String>(data: 'cached'),
+            const LoadingOperation<String>(data: 'cached'),
+          ];
+
+          final labels = operations
+              .map(
+                (op) => switch (op) {
+                  IdleOperation(data: null) => 'idle',
+                  IdleOperation(:final data?) => 'idle($data)',
+                  LoadingOperation(data: null) => 'loading',
+                  LoadingOperation(:final data?) => 'reloading($data)',
+                  _ => 'other',
+                },
+              )
+              .toList();
+
+          expect(labels, [
+            'idle',
+            'loading',
+            'idle(cached)',
+            'reloading(cached)',
+          ]);
+        },
+      );
+
+      test('collapsed loading: skip the Idle distinction when not needed', () {
+        // If the screen does not need a separate idle state, match
+        // LoadingOperation alone and Idle will fall in (it extends
+        // LoadingOperation).
+        final operations = <OperationState<String>>[
+          const IdleOperation<String>(),
+          const LoadingOperation<String>(),
+          const LoadingOperation<String>(data: 'cached'),
+        ];
+
+        final labels = operations
+            .map(
+              (op) => switch (op) {
+                LoadingOperation(data: null) => 'spinner',
+                LoadingOperation(:final data?) => 'spinner+$data',
+                _ => 'other',
+              },
+            )
+            .toList();
+
+        expect(labels, ['spinner', 'spinner', 'spinner+cached']);
       });
     });
   });

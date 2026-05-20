@@ -1,5 +1,5 @@
-/// Type-safe async & stream state management for Flutter powered by **sealed
-/// classes**, **exhaustive pattern matching**, and **cached data**. No more
+/// Type-safe async & stream state management for Flutter powered by sealed
+/// classes, exhaustive pattern matching, and cached data. No more
 /// juggling `isLoading`, `error`, and `data` fields.
 ///
 /// Exported mixins

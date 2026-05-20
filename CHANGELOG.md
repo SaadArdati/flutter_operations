@@ -1,3 +1,86 @@
+## 1.6.0
+
+### BREAKING CHANGES
+
+- **Removed `SuccessOperation.empty()` constructor.** The dedicated "empty success" state added unnecessary surface area to model what is already expressible via the type parameter. Migration paths:
+  - **Fire-and-forget operations** (delete, logout, PIN confirm): parameterize the cubit/mixin with `void`. `SuccessOperation<void>` matches without destructuring `data`.
+  - **Legitimately optional payloads** (current user, current account): parameterize with `T?` (e.g., `OperationState<User?>`). `SuccessOperation<User?>(data: null)` expresses "succeeded with no value" honestly.
+- **Removed `SuccessOperation.empty` field.** Was only meaningful in combination with the `.empty()` constructor. Use `state.hasData` / `state.hasNoData` for the equivalent check.
+- **`SuccessOperation.data` no longer throws `StateError`.** The previous "empty" runtime trap is gone. `data` returns exactly `T`: non-null when `T` is non-nullable, nullable when `T` is nullable.
+
+### Why this change
+
+`SuccessOperation` in 1.x carried a `bool empty` flag and a `StateError`-throwing `data` getter to support `SuccessOperation.empty()`. This forced the type system to lie: `SuccessOperation<User>.data` claimed non-null `User` while runtime could throw. The fix is to let `T` speak for itself: if the operation may have no value, the consumer says so via `<User?>` or `<void>`; otherwise `data` is guaranteed non-null with no runtime trap.
+
+### Migration
+
+```dart
+// Before (1.5.x):
+class DeleteCubit extends Cubit<OperationState<DeleteResult>> {
+  void run() {
+    // ... do the delete ...
+    emit(const SuccessOperation<DeleteResult>.empty());
+  }
+}
+
+// After (1.6.0): the cubit's T was a lie; the operation is fire-and-forget.
+class DeleteCubit extends Cubit<OperationState<void>> {
+  void run() {
+    // ... do the delete ...
+    emit(const SuccessOperation<void>(data: null));
+  }
+}
+```
+
+```dart
+// Before (1.5.x): "logged-out" expressed as an empty success of <User>
+class CurrentUserCubit extends Cubit<OperationState<User>> {
+  void signOut() => emit(const SuccessOperation<User>.empty());
+}
+
+// After (1.6.0): the cubit's T is honestly nullable.
+class CurrentUserCubit extends Cubit<OperationState<User?>> {
+  void signOut() => emit(const SuccessOperation<User?>(data: null));
+}
+```
+
+```dart
+// Pattern matching equivalents:
+switch (state) {
+  // Before:
+  SuccessOperation(empty: true) => const Text('Done'),
+  SuccessOperation(:var data) => DataView(data),
+
+  // After (for OperationState<User?>):
+  SuccessOperation(data: null) => const Text('Done'),
+  SuccessOperation(:var data?) => DataView(data),
+
+  // After (for OperationState<void>):
+  SuccessOperation() => const Text('Done'),
+}
+```
+
+**If you previously used `state.empty` for branching**, replace it with care. `state.empty` was on `SuccessOperation` and implied success. `state.hasNoData` is on the base `OperationState` and is also true for `LoadingOperation()` and `ErrorOperation()` without cached data. To preserve the original behavior, qualify the check:
+
+```dart
+// Before (1.5.x):
+if (state is SuccessOperation && state.empty) { ... }
+
+// After (1.6.0): keep the SuccessOperation check explicit
+if (state is SuccessOperation && state.hasNoData) { ... }
+// or use a pattern:
+if (state case SuccessOperation(data: null)) { ... }
+```
+
+**If you previously used `AsyncOperationMixin<T>` or `StreamOperationMixin<T>` with `T = void`**, no code changes are needed. The mixins emit `SuccessOperation<void>(data: ...)` internally when you call `setSuccess`; the type-parameter switch from a real `T` to `void` is the only edit at your callsites.
+
+### Bug Fixes
+
+- **Stream mixin `mounted` guard on data callbacks.** Both `onData` paths in `StreamOperationMixin` now check `mounted` before calling `setData`. Previously, late stream emissions could write to a disposed `ValueNotifier` after the widget had unmounted.
+- **`LoadingOperation.hashCode` now includes `runtimeType`.** Previously, `IdleOperation<T>(data: x)` and `LoadingOperation<T>(data: x)` shared a `hashCode` while being unequal under `==`, causing poor distribution in hash-based collections. The fix uses `Object.hash(runtimeType, data)`.
+
+---
+
 ## 1.5.0
 
 ### New Features

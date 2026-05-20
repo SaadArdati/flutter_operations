@@ -4,8 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 > This package emerged
->
-from [Exhaustive Pattern Matching for Exhausted Flutter Developers](https://medium.com/@saadoardati/exhaustive-pattern-matching-for-exhausted-flutter-developers-cd6837459862),
+> from [Exhaustive Pattern Matching for Exhausted Flutter Developers](https://medium.com/@saadoardati/exhaustive-pattern-matching-for-exhausted-flutter-developers-cd6837459862),
 > exploring how Dart's sealed classes and switch expressions can transform async state management.
 
 A lightweight, type-safe operation state management utility for Flutter that eliminates the common dance of manually
@@ -320,27 +319,52 @@ class ChatPageState extends State<ChatPage>
 
 ## Advanced Usage
 
-### Handling Empty Success States
+### Handling "Successful but No Data"
 
-For operations that may complete successfully but return no data:
+Pick the type parameter that matches what the operation actually models. There is no separate empty-success state. Two patterns cover the common cases:
+
+**1. Fire-and-forget mutations (delete, logout, PIN confirm):** parameterize with `void`.
 
 ```dart
-void fn() {
-  if (operation is SuccessOperation<List<Item>> && operation.empty) {
-    return const Text('No items found');
-  }
+class DeleteCubit extends Cubit<OperationState<void>> {
+  DeleteCubit() : super(const IdleOperation<void>());
 
-  // Alternatively, use the getters.
-  if (operation.isSuccess && operation.hasNoData) {
-    return const Text('No items found');
+  Future<void> deleteItem(String id) async {
+    emit(const LoadingOperation<void>());
+    try {
+      await api.delete(id);
+      emit(const SuccessOperation<void>(data: null));
+    } catch (e, stack) {
+      emit(ErrorOperation<void>(message: e.toString(), exception: e, stackTrace: stack));
+    }
   }
+}
 
-  // Pattern matching with empty check
-  switch (operation) {
-    SuccessOperation(empty: true) => const Text('No data available'),
-    SuccessOperation(:var data) => DataWidget(data),
-  // ... other cases
-  }
+// In the widget:
+switch (state) {
+  LoadingOperation() => const CircularProgressIndicator(),
+  SuccessOperation() => const Text('Deleted'),
+  ErrorOperation(:var message) => Text('Failed: $message'),
+  // ...
+}
+```
+
+> The `data:` argument is still required at the constructor; pass `null`. The `data` field is never read in switch arms because `void` is unreadable. The mixins (`AsyncOperationMixin<void, W>`) call `setSuccess` internally with the void result; you do not need to construct `SuccessOperation<void>` by hand if you use the mixin.
+
+**2. Legitimately optional success values:** parameterize with `T?`.
+
+```dart
+class CurrentUserCubit extends Cubit<OperationState<User?>> { ... }
+
+switch (state) {
+  SuccessOperation(data: null) => const Text('No user signed in'),
+  SuccessOperation(:var data) => UserView(data),
+  // ...
+}
+
+// Or non-pattern style:
+if (state.isSuccess && state.hasNoData) {
+  return const Text('No user signed in');
 }
 ```
 
@@ -565,9 +589,8 @@ loading scenarios:
 
 ### `SuccessOperation<T>`
 
-- Represents a completed operation with data.
-- Data is guaranteed to be available and type-safe.
-- Supports empty success states with `SuccessOperation.empty()`.
+- Represents a completed operation. The `data` getter returns exactly `T`: non-null when `T` is non-nullable, nullable when `T` is nullable. Never throws.
+- For "successful but no data" scenarios, parameterize with `void` (fire-and-forget) or a nullable type like `User?` (legitimately optional payload).
 - Includes an optional `message` field for success-related information (e.g., server confirmation messages separate from
   the main data payload).
 
@@ -639,13 +662,15 @@ class _SearchPageState extends State<SearchPage>
 
 ## Pattern Matching Examples
 
-The power comes from exhaustive pattern matching.
-**IdleOperation is optional** - include it only when your widget needs manual loading control:
+The four sealed states unlock several distinct match styles. Pick the one that matches how much detail your UI cares about. Every pattern below is covered by a corresponding test in `test/unit/operation_state_test.dart` under "Pattern matching variants".
+
+### 1. Full fan-out (most explicit)
+
+When every state combination deserves its own widget. **IdleOperation is optional**: include it only when your widget supports manual loading.
 
 ```dart
 @override
 Widget build(BuildContext context) {
-  // Auto-loading widget - no IdleOperation needed
   return switch (operation) {
     LoadingOperation(data: null) => const LoadingWidget(),
     LoadingOperation(:var data?) =>
@@ -666,23 +691,108 @@ Widget build(BuildContext context) {
         ),
   };
 }
-
-// Manual loading widget - IdleOperation included
-@override
-Widget build(BuildContext context) {
-  return switch (operation) {
-    IdleOperation(data: null) => const Text('Ready to start'),
-    IdleOperation(:var data?) =>
-        Column(
-          children: [
-            DataDisplay(data),
-            ElevatedButton(onPressed: load, child: Text('Refresh')),
-          ],
-        ),
-  // ... rest of the cases same as above
-  };
-}
 ```
+
+### 2. Data-presence shortcut (skip the per-state ceremony)
+
+When the UI only cares about "is there data to render?", match on the base `OperationState` and let `(:final data?)` collapse Loading-with-cache, Success, and Error-with-cache into a single arm.
+
+```dart
+return switch (operation) {
+  OperationState(:final data?) => DataDisplay(data),
+  OperationState() => const LoadingWidget(),
+};
+```
+
+Two arms, exhaustive, no nested handling. Trade-off: you lose the ability to overlay a spinner or an error banner over the cached view. Reach for this on read-only screens where Loading and Success are visually identical once data exists.
+
+### 3. OR pattern for shared rendering across state types
+
+When the data-bearing arms share rendering but you still want to fall through to a spinner for the empty cases. The `||` (or) pattern lets you spell out exactly which states carry data without giving up specificity.
+
+```dart
+return switch (operation) {
+  LoadingOperation(:var data?) ||
+  SuccessOperation(:var data) ||
+  ErrorOperation(:var data?) =>
+      RefreshIndicator(onRefresh: reload, child: DataList(data)),
+  _ => const CircularProgressIndicator(),
+};
+```
+
+Useful when you want the data view to remain visible during reloads and after errors, without copy-pasting the renderer.
+
+### 4. Error-first, then catch-all (errors win over cache)
+
+A common UX rule: an error banner should always be authoritative, even if cached data is present. Match `ErrorOperation` first; everything else flows through a generic data-presence arm.
+
+```dart
+return switch (operation) {
+  ErrorOperation(:var message) => ErrorBanner(message),
+  OperationState(:final data?) => DataDisplay(data),
+  _ => const CircularProgressIndicator(),
+};
+```
+
+Order matters: Dart matches top to bottom, so the error arm is preferred even when `ErrorOperation` also carries cached `data`.
+
+### 5. Guards with `when` (branch on payload content)
+
+Use guards to branch on properties of the data without an extra `if` inside the body.
+
+```dart
+return switch (operation) {
+  SuccessOperation(:var data) when data.isEmpty => const EmptyStateWidget(),
+  SuccessOperation(:var data) => ListView.builder(itemCount: data.length, ...),
+  LoadingOperation() => const CircularProgressIndicator(),
+  ErrorOperation(:var message) => ErrorWidget(message),
+};
+```
+
+### 6. Collapse Idle into Loading (when the distinction does not matter)
+
+`IdleOperation` extends `LoadingOperation`, so matching `LoadingOperation` alone catches both. Skip the idle arm when the widget renders them identically.
+
+```dart
+return switch (operation) {
+  LoadingOperation(data: null) => const CircularProgressIndicator(),
+  LoadingOperation(:var data?) => DataDisplayWithSpinner(data),
+  SuccessOperation(:var data) => DataDisplay(data),
+  ErrorOperation(:var message, :var data?) => ErrorOverlay(data, message),
+  ErrorOperation(:var message) => ErrorWidget(message),
+};
+```
+
+If you do want them separate, match `IdleOperation` *before* `LoadingOperation`. Order matters: `LoadingOperation` would otherwise subsume `IdleOperation`.
+
+```dart
+return switch (operation) {
+  IdleOperation(data: null) => const Text('Tap to start'),
+  IdleOperation(:var data?) => ResultPreview(data),
+  LoadingOperation() => const CircularProgressIndicator(),
+  // ...
+};
+```
+
+### 7. Imperative shortcuts via getters (no switch at all)
+
+Pattern matching is not mandatory. For simple UI gates (button disabled while loading, conditional spinner overlay, etc.), boolean getters and `dataOrNull` are often clearer than a full switch.
+
+```dart
+ElevatedButton(
+  onPressed: operation.isLoading ? null : reload,
+  child: operation.isLoading
+      ? const CircularProgressIndicator()
+      : const Text('Refresh'),
+);
+
+// Or read the data nullably regardless of state:
+final cached = operation.dataOrNull;
+if (cached != null) return DataDisplay(cached);
+return const CircularProgressIndicator();
+```
+
+Mix and match: use patterns for the main render branch, getters for incidental UI hints (snackbars, button states, focus management).
 
 ## When to Use This Package
 
