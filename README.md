@@ -327,15 +327,17 @@ Pick the type parameter that matches what the operation actually models. There i
 
 ```dart
 class DeleteCubit extends Cubit<OperationState<void>> {
-  DeleteCubit() : super(const IdleOperation<void>());
+  // Inside the Cubit, `super()` and `emit()` both infer the operation's
+  // type argument from `OperationState<void>` — no need to repeat `<void>`.
+  DeleteCubit() : super(const IdleOperation());
 
   Future<void> deleteItem(String id) async {
-    emit(const LoadingOperation<void>());
+    emit(const LoadingOperation());
     try {
       await api.delete(id);
-      emit(const SuccessOperation<void>(data: null));
+      emit(const SuccessOperation(data: null));
     } catch (e, stack) {
-      emit(ErrorOperation<void>(message: e.toString(), exception: e, stackTrace: stack));
+      emit(ErrorOperation(message: e.toString(), exception: e, stackTrace: stack));
     }
   }
 }
@@ -370,26 +372,23 @@ if (state.isSuccess && state.hasNoData) {
 
 ### Using Success Messages
 
-The `SuccessOperation` includes an optional `message` field that can be used to display server confirmation messages or
-other success-related information. To include a message, override `fetchWithMessage()` instead of `fetch()`:
+The `SuccessOperation` includes an optional `message` field for server confirmation messages or other success-related
+information. Call `attachMessage(String)` inside `fetch()` before returning data, and the mixin will populate
+`SuccessOperation.message` automatically:
 
 ```dart
 class MyState extends State<MyWidget>
     with AsyncOperationMixin<MyData, MyWidget> {
-  
+
   @override
-  Future<(MyData, String?)> fetchWithMessage() async {
-    // Simulating an API response that includes both data and message
+  Future<MyData> fetch() async {
     final response = await http.get(Uri.parse('https://api.example.com/data'));
     final json = jsonDecode(response.body);
-    
-    // Extract and decode the data
+
     final data = MyData.fromJson(json['data']);
-    
-    // Extract the message from the server response
     final message = json['message'] as String?;
-    
-    return (data, message);
+    if (message != null) attachMessage(message);
+    return data;
   }
 
   @override
@@ -412,30 +411,25 @@ class MyState extends State<MyWidget>
 }
 ```
 
-**Important:** You must override exactly one of `fetch()` or `fetchWithMessage()`, but not both. Use `fetch()` for
-simple cases without messages, or `fetchWithMessage()` when you need a success message.
-
 You can also access the message directly:
 
 ```dart
 if (operation case SuccessOperation(:final message?)) {
-ScaffoldMessenger.of(context).showSnackBar(
-SnackBar(content: Text(message)),
-);
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(content: Text(message)),
+  );
 }
 ```
 
-For streams, use `streamWithMessage()` similarly:
+For streams, call `attachMessage` inside `stream()` before yielding each value:
 
 ```dart
 @override
-Stream<(Message, String?)> streamWithMessage() {
-  return messageStream.map((jsonMap) {
-    // Assuming the stream emits Maps with 'data' and 'message' fields
-    final data = Message.fromJson(jsonMap['data']);
-    final message = jsonMap['message'] as String?;
-    return (data, message);
-  });
+Stream<Message> stream() async* {
+  await for (final raw in chatService.messagesStream()) {
+    if (raw.serverMessage != null) attachMessage(raw.serverMessage!);
+    yield raw.data;
+  }
 }
 ```
 

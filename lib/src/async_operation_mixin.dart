@@ -3,19 +3,8 @@ import 'dart:developer' as developer;
 
 import 'package:flutter/widgets.dart';
 
+import 'message_zone.dart';
 import 'operation_state.dart';
-
-/// Internal exception used to detect when fetch/fetchWithMessage methods
-///  are not overridden.
-class _NotImplementedException implements Exception {
-  final String methodName;
-
-  const _NotImplementedException(this.methodName);
-
-  @override
-  String toString() =>
-      'AsyncOperationMixinException: $methodName not implemented';
-}
 
 /// A mixin that adds asynchronous state management to a [StatefulWidget].
 ///
@@ -74,99 +63,29 @@ mixin AsyncOperationMixin<T, K extends StatefulWidget> on State<K> {
 
   /// Fetches the data for this widget.
   ///
-  /// You must override either this method OR [fetchWithMessage], but not both.
-  ///
-  /// This method is for simple cases where you only need to return data.
-  /// For cases where you want to include a success message, override
-  /// [fetchWithMessage] instead.
-  ///
-  /// Default implementation throws to indicate it must be overridden.
-  FutureOr<T> fetch() => throw const _NotImplementedException('fetch');
+  /// Override this method to provide the data for this operation.
+  FutureOr<T> fetch();
 
-  /// Fetches the data with an optional success message.
-  ///
-  /// You must override either this method OR [fetch], but not both.
-  ///
-  /// Default implementation throws to indicate it must be overridden.
-  /// When overridden, return a record `(T, String?)` containing the data
-  /// and optional message.
-  ///
-  /// Example:
-  /// ```dart
-  /// @override
-  /// Future<(User, String?)> fetchWithMessage() async {
-  ///   // API returns a Map with 'data' and 'message' fields
-  ///   final response = await http.get(Uri.parse('https://api.example.com/user'));
-  ///   final json = jsonDecode(response.body);
-  ///
-  ///   // Decode the data
-  ///   final user = User.fromJson(json['data']);
-  ///
-  ///   // Extract the message from server response
-  ///   final message = json['message'] as String?;
-  ///
-  ///   return (user, message);
-  /// }
-  /// ```
-  FutureOr<(T, String?)> fetchWithMessage() =>
-      throw const _NotImplementedException('fetchWithMessage');
-
-  /// Loads data and updates the operation state accordingly.
   /// Handles the complete loading lifecycle with race condition protection.
+  ///
+  /// Wraps the [fetch] call in a [Zone] holding a per-call [MessageCell].
+  /// Any [attachMessage] calls made inside [fetch] (sync or after awaits)
+  /// write to that cell; the message is then paired with the result on
+  /// the resulting [SuccessOperation].
   FutureOr<void> load({bool cached = true}) async {
     final currentGeneration = ++_generation;
     setLoading(cached: cached);
 
+    final cell = MessageCell();
     try {
-      // Try fetchWithMessage() first.
-      (T, String?)? resultWithMessage;
-      try {
-        resultWithMessage = await fetchWithMessage();
-      } on _NotImplementedException {
-        // fetchWithMessage not overridden, try fetch()
-      }
-
-      if (resultWithMessage != null) {
-        // fetchWithMessage() was overridden, validate fetch() is not.
-        // This check is free in the happy path: the default fetch() throws
-        // _NotImplementedException synchronously with zero side effects.
-        // Side effects only occur in the error case (both overridden),
-        // where we throw StateError anyway.
-        try {
-          await fetch();
-          // If we get here, fetch() was also overridden (didn't throw)
-          throw StateError(
-            'Both fetch() and fetchWithMessage() are overridden. '
-            'You must override exactly one of them.',
-          );
-        } on _NotImplementedException {
-          // fetch() was not overridden, use fetchWithMessage result
-          if (!mounted || _generation != currentGeneration) return;
-          setSuccess(resultWithMessage.$1, message: resultWithMessage.$2);
-          return;
-        }
-      }
-
-      // fetchWithMessage() was not overridden, use fetch()
-      final result = await fetch();
+      final result = await runZoned(
+        () => fetch(),
+        zoneValues: {messageKey: cell},
+      );
       if (!mounted || _generation != currentGeneration) return;
-
-      setSuccess(result);
+      setSuccess(result, message: cell.value);
     } catch (exception, stackTrace) {
       if (!mounted || _generation != currentGeneration) return;
-
-      // Check if neither method was overridden
-      if (exception is _NotImplementedException) {
-        throw StateError(
-          'Neither fetch() nor fetchWithMessage() are overridden. '
-          'You must override exactly one of them.',
-        );
-      }
-
-      // Re-throw StateError — it indicates a programming error,
-      // not a runtime failure.
-      if (exception is StateError) rethrow;
-
       setError(
         exception,
         stackTrace,
@@ -219,6 +138,15 @@ mixin AsyncOperationMixin<T, K extends StatefulWidget> on State<K> {
     onSuccess(data);
 
     if (mounted && globalRefresh) setState(() {});
+  }
+
+  /// Attaches an optional message to the success state produced by the
+  /// current [fetch] call. Safe to call from anywhere inside [fetch],
+  /// including after awaits. Outside a [load] call this is a no-op.
+  @protected
+  void attachMessage(String message) {
+    final cell = Zone.current[messageKey] as MessageCell?;
+    cell?.value = message;
   }
 
   /// Updates the state to error with the provided exception details.

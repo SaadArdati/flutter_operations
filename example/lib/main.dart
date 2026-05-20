@@ -106,7 +106,7 @@ class BasicAsyncExample extends StatefulWidget {
 class _BasicAsyncExampleState extends State<BasicAsyncExample>
     with AsyncOperationMixin<User, BasicAsyncExample> {
   @override
-  Future<(User, String?)> fetchWithMessage() async {
+  Future<User> fetch() async {
     // Simulating an API response with both data and message fields
     final response = await MockApiService.fetchUserWithMessage();
 
@@ -115,8 +115,9 @@ class _BasicAsyncExampleState extends State<BasicAsyncExample>
 
     // Extract the message from the server response
     final message = response['message'] as String?;
+    if (message != null) attachMessage(message);
 
-    return (user, message);
+    return user;
   }
 
   @override

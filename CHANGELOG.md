@@ -1,51 +1,106 @@
-## 1.6.0
+## 2.0.0
+
+A focused redesign on two fronts: the success state's type-honesty (no more `SuccessOperation.empty()` runtime trap), and the override surface (single `fetch()` / `stream()` plus an optional `attachMessage(String)` channel). The dual-method pattern is gone; the `bool empty` flag is gone; the `StateError`-throwing `data` getter is gone.
 
 ### BREAKING CHANGES
 
-- **Removed `SuccessOperation.empty()` constructor.** The dedicated "empty success" state added unnecessary surface area to model what is already expressible via the type parameter. Migration paths:
-  - **Fire-and-forget operations** (delete, logout, PIN confirm): parameterize the cubit/mixin with `void`. `SuccessOperation<void>` matches without destructuring `data`.
-  - **Legitimately optional payloads** (current user, current account): parameterize with `T?` (e.g., `OperationState<User?>`). `SuccessOperation<User?>(data: null)` expresses "succeeded with no value" honestly.
-- **Removed `SuccessOperation.empty` field.** Was only meaningful in combination with the `.empty()` constructor. Use `state.hasData` / `state.hasNoData` for the equivalent check.
+#### Override surface
+
+- **Removed `fetchWithMessage()` and `streamWithMessage()` overrides.** Replaced by a single required override per mixin (`fetch()` / `stream()`) plus an optional `attachMessage(String)` channel.
+- **`fetch()` and `stream()` are now abstract.** Missing overrides surface as compile-time errors instead of runtime `StateError`s.
+- **Removed `(T, String?)` record return shape** from override signatures. Optional success messages flow through `attachMessage(String)` instead.
+
+#### Success state
+
+- **Removed `SuccessOperation.empty()` constructor and `bool empty` field.** The dedicated "empty success" state added surface area to model what is already expressible via the type parameter (`<void>` for fire-and-forget, `<T?>` for legitimately optional payloads).
 - **`SuccessOperation.data` no longer throws `StateError`.** The previous "empty" runtime trap is gone. `data` returns exactly `T`: non-null when `T` is non-nullable, nullable when `T` is nullable.
 
-### Why this change
+### New Features
 
-`SuccessOperation` in 1.x carried a `bool empty` flag and a `StateError`-throwing `data` getter to support `SuccessOperation.empty()`. This forced the type system to lie: `SuccessOperation<User>.data` claimed non-null `User` while runtime could throw. The fix is to let `T` speak for itself: if the operation may have no value, the consumer says so via `<User?>` or `<void>`; otherwise `data` is guaranteed non-null with no runtime trap.
+- **`attachMessage(String)`** on both `AsyncOperationMixin` and `StreamOperationMixin`. Call from inside `fetch()` (async) or before each `yield` (stream `async*`) to attach an optional message to the resulting `SuccessOperation`. Internally backed by a per-call `Zone` cell, so concurrent fetches and re-listens are race-safe by construction.
 
-### Migration
+### Bug Fixes
+
+- **Stream mixin `mounted` guard on data callbacks.** Both `onData` paths in `StreamOperationMixin` now check `mounted` before calling `setData`. Previously, late stream emissions could write to a disposed `ValueNotifier` after the widget had unmounted.
+- **`LoadingOperation.hashCode` now includes `runtimeType`.** Previously, `IdleOperation<T>(data: x)` and `LoadingOperation<T>(data: x)` shared a `hashCode` while being unequal under `==`, causing poor distribution in hash-based collections. The fix uses `Object.hash(runtimeType, data)`.
+
+### Why these changes
+
+**The success state.** `SuccessOperation` in 1.x carried a `bool empty` flag and a `StateError`-throwing `data` getter to support `SuccessOperation.empty()`. This forced the type system to lie: `SuccessOperation<User>.data` claimed non-null `User` while runtime could throw. The fix is to let `T` speak for itself: if the operation may have no value, the consumer says so via `<User?>` or `<void>`; otherwise `data` is guaranteed non-null with no runtime trap.
+
+**The override surface.** The dual `fetch()` / `fetchWithMessage()` API required runtime validation ("exactly one must be overridden") and forced callers who wanted a message to wrap their result in a `(T, String?)` record. The new shape uses Dart's `Zone` to thread an optional message channel through `fetch()` without touching its return type. Calls to `attachMessage` from inside `fetch` (or before each `yield` inside `stream`) write to a per-call cell that the mixin reads when materializing the `SuccessOperation`. Concurrent fetches each get their own cell, so the race protection is structural.
+
+### How `attachMessage` works
+
+The mixins wrap each `load()` / `listen()` call in a `runZoned` block holding a per-call `MessageCell`. `attachMessage` reads `Zone.current` to find the cell. After fetch resolves (one-shot) or each emission arrives (stream), the mixin reads the cell synchronously and pairs the message with the value. The cell read happens before any await in the listener body, so async generator back-pressure pairs each yield with its own message.
+
+```dart
+class _UserState extends State<UserWidget>
+    with AsyncOperationMixin<User, UserWidget> {
+  @override
+  Future<User> fetch() async {
+    final response = await api.getUser();
+    if (response.serverMessage != null) attachMessage(response.serverMessage!);
+    return response.data;
+  }
+}
+```
+
+### Migration from 1.5.x
+
+#### `SuccessOperation.empty()` is gone: pick the right type parameter
+
+If the operation never produces a value (delete, logout, fire-and-forget), parameterize with `void`:
 
 ```dart
 // Before (1.5.x):
 class DeleteCubit extends Cubit<OperationState<DeleteResult>> {
   void run() {
     // ... do the delete ...
-    emit(const SuccessOperation<DeleteResult>.empty());
+    emit(const SuccessOperation.empty());
   }
 }
 
-// After (1.6.0): the cubit's T was a lie; the operation is fire-and-forget.
+// After (2.0.0): the cubit's T was a lie; the operation is fire-and-forget.
 class DeleteCubit extends Cubit<OperationState<void>> {
   void run() {
     // ... do the delete ...
-    emit(const SuccessOperation<void>(data: null));
+    emit(const SuccessOperation(data: null));
   }
 }
 ```
+
+If the operation may legitimately produce no value (current user when signed out, search result), parameterize with `T?`:
 
 ```dart
 // Before (1.5.x): "logged-out" expressed as an empty success of <User>
 class CurrentUserCubit extends Cubit<OperationState<User>> {
-  void signOut() => emit(const SuccessOperation<User>.empty());
+  void signOut() => emit(const SuccessOperation.empty());
 }
 
-// After (1.6.0): the cubit's T is honestly nullable.
+// After (2.0.0): the cubit's T is honestly nullable.
 class CurrentUserCubit extends Cubit<OperationState<User?>> {
-  void signOut() => emit(const SuccessOperation<User?>(data: null));
+  void signOut() => emit(const SuccessOperation(data: null));
 }
 ```
 
+#### `state.empty` is gone: qualify with the success type
+
+`state.empty` was on `SuccessOperation` and implied success. `state.hasNoData` is on the base `OperationState` and is also true for `LoadingOperation()` and `ErrorOperation()` without cached data, so a naive replacement changes branch semantics:
+
 ```dart
-// Pattern matching equivalents:
+// Before (1.5.x):
+if (state is SuccessOperation && state.empty) { ... }
+
+// After (2.0.0): keep the SuccessOperation check explicit
+if (state is SuccessOperation && state.hasNoData) { ... }
+// or use a pattern:
+if (state case SuccessOperation(data: null)) { ... }
+```
+
+#### Pattern matching equivalents
+
+```dart
 switch (state) {
   // Before:
   SuccessOperation(empty: true) => const Text('Done'),
@@ -60,24 +115,26 @@ switch (state) {
 }
 ```
 
-**If you previously used `state.empty` for branching**, replace it with care. `state.empty` was on `SuccessOperation` and implied success. `state.hasNoData` is on the base `OperationState` and is also true for `LoadingOperation()` and `ErrorOperation()` without cached data. To preserve the original behavior, qualify the check:
+#### `fetchWithMessage()` and `streamWithMessage()` are gone: use `attachMessage`
 
 ```dart
 // Before (1.5.x):
-if (state is SuccessOperation && state.empty) { ... }
+@override
+Future<(User, String?)> fetchWithMessage() async {
+  final response = await api.getUser();
+  return (response.data, response.message);
+}
 
-// After (1.6.0): keep the SuccessOperation check explicit
-if (state is SuccessOperation && state.hasNoData) { ... }
-// or use a pattern:
-if (state case SuccessOperation(data: null)) { ... }
+// After (2.0.0):
+@override
+Future<User> fetch() async {
+  final response = await api.getUser();
+  if (response.message != null) attachMessage(response.message!);
+  return response.data;
+}
 ```
 
-**If you previously used `AsyncOperationMixin<T>` or `StreamOperationMixin<T>` with `T = void`**, no code changes are needed. The mixins emit `SuccessOperation<void>(data: ...)` internally when you call `setSuccess`; the type-parameter switch from a real `T` to `void` is the only edit at your callsites.
-
-### Bug Fixes
-
-- **Stream mixin `mounted` guard on data callbacks.** Both `onData` paths in `StreamOperationMixin` now check `mounted` before calling `setData`. Previously, late stream emissions could write to a disposed `ValueNotifier` after the widget had unmounted.
-- **`LoadingOperation.hashCode` now includes `runtimeType`.** Previously, `IdleOperation<T>(data: x)` and `LoadingOperation<T>(data: x)` shared a `hashCode` while being unequal under `==`, causing poor distribution in hash-based collections. The fix uses `Object.hash(runtimeType, data)`.
+Same shape for streams: drop the `streamWithMessage()` override and call `attachMessage(...)` before each `yield` inside `stream()` (which can be plain `Stream<T>` or `async*`).
 
 ---
 

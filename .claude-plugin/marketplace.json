@@ -1,0 +1,34 @@
+{
+  "name": "flutter-operations",
+  "owner": {
+    "name": "Saad Ardati"
+  },
+  "description": "Skill for flutter_operations: type-safe async operation state management for Flutter using sealed classes and exhaustive pattern matching.",
+  "plugins": [
+    {
+      "name": "flutter-operations",
+      "source": "./skills",
+      "description": "Operation-state authoring skill for package:flutter_operations/flutter_operations.dart. Load when wiring AsyncOperationMixin or StreamOperationMixin, designing exhaustive matches over OperationState, choosing the type parameter T for the operation, or propagating cached data through Loading and Error states.",
+      "version": "2.0.0",
+      "author": {
+        "name": "Saad Ardati"
+      },
+      "homepage": "https://pub.dev/packages/flutter_operations",
+      "repository": "https://github.com/SaadArdati/flutter_operations",
+      "license": "BSD-3-Clause",
+      "keywords": [
+        "dart",
+        "flutter",
+        "async",
+        "result-type",
+        "sealed-class",
+        "state-management",
+        "stream",
+        "pattern-matching"
+      ],
+      "category": "development",
+      "skills": "./",
+      "strict": false
+    }
+  ]
+}

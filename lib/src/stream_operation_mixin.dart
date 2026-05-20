@@ -3,19 +3,8 @@ import 'dart:developer' as developer;
 
 import 'package:flutter/widgets.dart';
 
+import 'message_zone.dart';
 import 'operation_state.dart';
-
-/// Internal exception used to detect when stream/streamWithMessage methods
-///  are not overridden.
-class _NotImplementedException implements Exception {
-  final String methodName;
-
-  const _NotImplementedException(this.methodName);
-
-  @override
-  String toString() =>
-      'StreamOperationMixinException: $methodName not implemented';
-}
 
 /// A mixin that adds stream-based state management to a [StatefulWidget].
 ///
@@ -74,124 +63,46 @@ mixin StreamOperationMixin<T, K extends StatefulWidget> on State<K> {
 
   /// Creates and returns the stream to listen to.
   ///
-  /// You must override either this method OR [streamWithMessage],
-  /// but not both.
-  ///
-  /// This method is for simple cases where you only need to return data.
-  /// For cases where you want to include success messages, override
-  /// [streamWithMessage] instead.
-  ///
-  /// Default implementation throws to indicate it must be overridden.
-  Stream<T> stream() => throw const _NotImplementedException('stream');
-
-  /// Creates and returns a stream that includes optional success messages.
-  ///
-  /// You must override either this method OR [stream], but not both.
-  ///
-  /// Default implementation throws to indicate it must be overridden.
-  /// When overridden, return a stream of records `(T, String?)` containing
-  /// data and optional messages.
-  ///
-  /// Example:
-  /// ```dart
-  /// @override
-  /// Stream<(User, String?)> streamWithMessage() {
-  ///   return userStream.map((jsonMap) {
-  ///     // Stream emits Maps with 'data' and 'message' fields
-  ///     final user = User.fromJson(jsonMap['data']);
-  ///     final message = jsonMap['message'] as String?;
-  ///     return (user, message);
-  ///   });
-  /// }
-  /// ```
-  Stream<(T, String?)> streamWithMessage() =>
-      throw const _NotImplementedException('streamWithMessage');
+  /// Override this method to provide the data stream for this operation.
+  Stream<T> stream();
 
   /// Starts listening to the stream and manages subscription lifecycle.
   /// Cancels existing subscription and creates a new one.
+  ///
+  /// Wraps the [stream] subscription in a [Zone] holding a per-call
+  /// [MessageCell]. Any [attachMessage] calls made inside [stream]
+  /// (typically inside an `async*` body before each `yield`) write to that
+  /// cell; the message is then paired with the value on the resulting
+  /// [SuccessOperation].
   void listen({bool cached = true}) {
     final currentGeneration = ++_generation;
     setLoading(cached: cached);
-    if (_streamSubscription != null) {
-      _streamSubscription!.cancel();
-    }
+    _streamSubscription?.cancel();
 
+    final cell = MessageCell();
     try {
-      // Try streamWithMessage() first.
-      Stream<(T, String?)>? streamWithMsg;
-      try {
-        streamWithMsg = streamWithMessage();
-      } on _NotImplementedException {
-        // streamWithMessage not overridden, try stream()
-      }
-
-      if (streamWithMsg != null) {
-        // streamWithMessage() was overridden, validate stream() is not.
-        // This check is free in the happy path: the default stream() throws
-        // _NotImplementedException synchronously with zero side effects.
-        try {
-          stream();
-          // If we get here, stream() was also overridden (didn't throw)
-          throw StateError(
-            'Both stream() and streamWithMessage() are overridden. '
-            'You must override exactly one of them.',
-          );
-        } on _NotImplementedException {
-          // stream() was not overridden, use streamWithMessage
-          _streamSubscription = streamWithMsg.listen(
-            (result) {
-              if (!mounted || _generation != currentGeneration) return;
-              setData(result.$1, message: result.$2);
-            },
-            onError: (exception, stackTrace) {
-              if (!mounted || _generation != currentGeneration) return;
-
-              setError(
-                exception,
-                stackTrace,
-                message: errorMessage(exception, stackTrace),
-                cached: cached,
-              );
-            },
-            onDone: onDone,
-          );
-          return;
-        }
-      }
-
-      // streamWithMessage() was not overridden, use stream()
-      _streamSubscription = stream().listen(
-        (value) {
-          if (!mounted || _generation != currentGeneration) return;
-          setData(value);
-        },
-        onError: (exception, stackTrace) {
-          if (!mounted || _generation != currentGeneration) return;
-
-          setError(
-            exception,
-            stackTrace,
-            message: errorMessage(exception, stackTrace),
-            cached: cached,
-          );
-        },
-        onDone: onDone,
-      );
+      runZoned(() {
+        _streamSubscription = stream().listen(
+          (value) {
+            if (!mounted || _generation != currentGeneration) return;
+            final msg = cell.value;
+            cell.value = null;
+            setData(value, message: msg);
+          },
+          onError: (exception, stackTrace) {
+            if (!mounted || _generation != currentGeneration) return;
+            setError(
+              exception,
+              stackTrace,
+              message: errorMessage(exception, stackTrace),
+              cached: cached,
+            );
+          },
+          onDone: onDone,
+        );
+      }, zoneValues: {messageKey: cell});
     } catch (exception, stackTrace) {
       if (!mounted || _generation != currentGeneration) return;
-
-      // Check if neither method was overridden
-      if (exception is _NotImplementedException) {
-        throw StateError(
-          'Neither stream() nor streamWithMessage() are overridden. '
-          'You must override exactly one of them.',
-        );
-      }
-
-      // Re-throw StateError — it indicates a programming error,
-      // not a runtime failure.
-      if (exception is StateError) rethrow;
-
       setError(
         exception,
         stackTrace,
@@ -199,6 +110,15 @@ mixin StreamOperationMixin<T, K extends StatefulWidget> on State<K> {
         cached: cached,
       );
     }
+  }
+
+  /// Attaches an optional message to the next [setData] emission produced
+  /// by the current [stream] subscription. Safe to call inside `async*`
+  /// bodies before each `yield`. Outside a [listen] call this is a no-op.
+  @protected
+  void attachMessage(String message) {
+    final cell = Zone.current[messageKey] as MessageCell?;
+    cell?.value = message;
   }
 
   void setIdle({bool cached = true}) {
