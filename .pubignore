@@ -1,0 +1,19 @@
+# .pubignore overrides .gitignore in this directory, so restate the
+# build/cache exclusions that .gitignore would otherwise handle. Dotfiles
+# (.git, .dart_tool, .idea, .vscode, .claude-plugin, ...) are excluded
+# automatically by pub and do not need to be listed.
+build/
+coverage/
+
+# Internal design artifacts and AI skill files: not part of the published
+# package. Tests stay (community convention).
+docs/
+skills/
+
+# Example app: ship the Dart source and the example's pubspec so pub.dev
+# can render it. Platform-specific scaffolding (macOS app shell, web
+# index/icons) is not useful to consumers reading the package.
+example/macos/
+example/web/
+example/pubspec.lock
+example/example.iml
