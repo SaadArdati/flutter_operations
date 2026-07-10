@@ -145,8 +145,8 @@ mixin AsyncOperationMixin<T, K extends StatefulWidget> on State<K> {
   /// including after awaits. Outside a [load] call this is a no-op.
   @protected
   void attachMessage(String message) {
-    final cell = Zone.current[messageKey] as MessageCell?;
-    cell?.value = message;
+    final cell = Zone.current[messageKey];
+    if (cell case MessageCell cell?) cell.value = message;
   }
 
   /// Updates the state to error with the provided exception details.

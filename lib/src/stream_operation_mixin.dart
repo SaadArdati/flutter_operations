@@ -117,8 +117,8 @@ mixin StreamOperationMixin<T, K extends StatefulWidget> on State<K> {
   /// bodies before each `yield`. Outside a [listen] call this is a no-op.
   @protected
   void attachMessage(String message) {
-    final cell = Zone.current[messageKey] as MessageCell?;
-    cell?.value = message;
+    final cell = Zone.current[messageKey];
+    if (cell case MessageCell cell?) cell.value = message;
   }
 
   void setIdle({bool cached = true}) {

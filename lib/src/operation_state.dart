@@ -44,6 +44,9 @@ sealed class OperationState<T> {
   /// [SuccessOperation], this is [SuccessOperation.data] widened to `T?`,
   /// which is convenient when handling all states uniformly without pattern
   /// matching.
+  ///
+  /// This let's you do: operation.dataOrNull without checking the runtime type
+  /// for a guaranteed vs nullable value.
   T? get dataOrNull => _data;
 
   /// Whether this state has associated data.
