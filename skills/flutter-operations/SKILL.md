@@ -20,12 +20,32 @@ categories:
   - dart
   - flutter
 metadata:
-  version: 2.0.0
+  version: 2.0.1
 ---
 
 # flutter_operations
 
 Type-safe async operation state for Flutter using sealed classes and exhaustive pattern matching. Four states (Idle, Loading, Success, Error), two mixins (one-shot and streaming), one rule: the operation's payload type `T` is what the developer wrote. Nothing is injected, nothing throws on read, nothing has to be unboxed at the call site.
+
+## The entire point: make bugs unrepresentable, don't guard against them
+
+This is the thesis of the package, and it must govern every line you write with it or add to it. The goal is never "catch the bug at runtime" — it is "arrange the types and scopes so the bug cannot be written in the first place." A guard you have to remember is a bug you haven't removed yet.
+
+The package earns this claim three times over, and each is a template for the kind of change that belongs here:
+
+1. **Illegal *states* are unrepresentable.** `isLoading` + `error` + `data` as loose fields let you represent "loading and errored with data," a state that means nothing. The sealed `OperationState<T>` hierarchy makes that combination impossible to construct — the compiler, not discipline, enforces it.
+2. **A lying *type* is unrepresentable.** 1.x had `SuccessOperation.empty()`: a `data` getter typed non-null `T` that threw at runtime. The type promised what the runtime broke. 2.0 deletes the flag and the throw; `SuccessOperation<T>.data` returns exactly `T`, and the constructor (`required T super.data`) makes `SuccessOperation<User>(data: null)` a *compile* error. The invariant moved from a stack trace to a squiggly line.
+3. **Illegal *interleavings* are unrepresentable.** The optional success message rides a per-`load()` `Zone` cell, not a shared instance field. Two concurrent fetches cannot cross-talk because they never share a mailbox — there is no clearing logic to get wrong, because the sharing itself does not exist.
+
+The through-line: sealed classes made illegal states unrepresentable; an honest `T` made lying types unrepresentable; zone-scoped cells made illegal interleavings unrepresentable. **The same philosophy, applied to shape, to type, and to time.**
+
+### What this means when you write or extend code here
+
+- Prefer a type that forbids the bad value over a runtime check that rejects it. `<User?>` / `<void>` over an `empty` flag; `required T` over a throwing getter.
+- Prefer a scope that forbids the bad sharing over a guard that cleans up after it. A per-call cell over a shared field with reset logic.
+- Reach for the type parameter before reaching for a new field, method, or flag. Most "I need to model X" is already spellable in `T` (non-nullable, nullable, or `void`).
+- If you are adding a runtime `throw`, an `assert`, or a "you must remember to…" doc line, stop: that is the shape of the bug the package exists to delete. Find the version where the mistake cannot compile.
+- When you cannot make something unrepresentable, say so plainly (see the `attachMessage` zone boundaries below) rather than papering over it.
 
 ## When to use
 
@@ -95,6 +115,8 @@ Both expose `operation: OperationState<T>` (via `operationNotifier: ValueNotifie
 Shared: `setError(Object e, StackTrace s, {String? message, bool cached})`, `setIdle({cached})`, `setLoading({cached})`, `onError`, `onIdle`, `onLoading`, `errorMessage(e, s)`.
 
 For an optional success message, call `attachMessage(String)` from inside `fetch` or `stream` (the latter before each `yield`). The string becomes `SuccessOperation.message` on the resulting state.
+
+`attachMessage` is backed by a per-call `Zone` value, so it only captures when called from code running inside the fetch/stream's own async flow (direct calls, `await` continuations, `async*` bodies, `.map`/`.where` transforms on the subscribed stream). It is a silent no-op when called from another isolate (`compute`), from a callback the platform schedules on the root zone, or outside a `load()`/`listen()` altogether. When constructing an `OperationState` by hand (e.g. inside a Cubit), skip `attachMessage` and pass `SuccessOperation(data: ..., message: ...)` directly.
 
 ## Pattern matching
 

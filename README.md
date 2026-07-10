@@ -386,8 +386,7 @@ class MyState extends State<MyWidget>
     final json = jsonDecode(response.body);
 
     final data = MyData.fromJson(json['data']);
-    final message = json['message'] as String?;
-    if (message != null) attachMessage(message);
+    if (json['message'] case final String message) attachMessage(message);
     return data;
   }
 
@@ -427,7 +426,7 @@ For streams, call `attachMessage` inside `stream()` before yielding each value:
 @override
 Stream<Message> stream() async* {
   await for (final raw in chatService.messagesStream()) {
-    if (raw.serverMessage != null) attachMessage(raw.serverMessage!);
+    if (raw.serverMessage case final message?) attachMessage(message);
     yield raw.data;
   }
 }

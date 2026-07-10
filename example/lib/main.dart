@@ -113,9 +113,8 @@ class _BasicAsyncExampleState extends State<BasicAsyncExample>
     // Extract and decode the data
     final user = User.fromJson(response['data']);
 
-    // Extract the message from the server response
-    final message = response['message'] as String?;
-    if (message != null) attachMessage(message);
+    // Attach the server message, if any, to the resulting SuccessOperation
+    if (response['message'] case final String message) attachMessage(message);
 
     return user;
   }
