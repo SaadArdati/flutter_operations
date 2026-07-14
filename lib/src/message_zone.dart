@@ -7,4 +7,10 @@ class MessageCell {
 
 /// Zone key used to look up the active [MessageCell] from any code running
 /// inside a fetch or stream body. Library-private: not exported.
-const Object messageKey = Object();
+///
+/// Must be a lazily-initialized `final`, never `const`: Dart canonicalizes
+/// const instances, so `const Object()` would be identical to every other
+/// `const Object()` in the program, making this key forgeable and prone to
+/// colliding with unrelated zone values. A fresh `Object()` guarantees a
+/// unique, unforgeable identity.
+final Object messageKey = Object();

@@ -1,3 +1,11 @@
+## 2.0.2
+
+### Bug Fixes
+
+- **Fixed a latent zone-key collision in `attachMessage`.** The internal zone key was declared `const Object()`, which Dart canonicalizes to a single program-wide instance, making it identical to every other `const Object()` in the program and prone to colliding with unrelated zone values. It is now a unique `final Object()`. No public API change.
+
+---
+
 ## 2.0.1
 
 ### Improvements
