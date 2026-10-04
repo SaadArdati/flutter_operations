@@ -2,8 +2,8 @@
 library;
 
 import 'package:flutter/material.dart';
-import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_operations/flutter_operations.dart' as ops;
+import 'package:flutter_test/flutter_test.dart';
 
 import '../../helpers/test_helpers.dart';
 
@@ -27,13 +27,13 @@ class _ErrorMessageWidgetState extends State<_ErrorMessageWidget>
   Future<TestData> fetch() async => widget.future;
 
   @override
-  String errorMessage(Object exception, StackTrace stackTrace) =>
-      'CUSTOM: ${exception.toString()}';
+  String errorMessage(Object error, StackTrace stackTrace) =>
+      'CUSTOM: ${error.toString()}';
 
   @override
-  void onError(Object exception, StackTrace stackTrace, {String? message}) {
+  void onError(Object error, StackTrace stackTrace, {String? message}) {
     lastErrorMessage = message;
-    super.onError(exception, stackTrace, message: message);
+    super.onError(error, stackTrace, message: message);
   }
 
   @override

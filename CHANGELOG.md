@@ -1,8 +1,48 @@
+## 3.0.0
+
+This release expands `OperationState<T>` into a complete standalone state model while keeping both widget mixins available for lifecycle-owned Future and Stream work.
+
+### Breaking Changes
+
+- **Renamed `ErrorOperation.exception` to `error`.** The constructor argument is now `error:`. This reflects that Dart can throw any `Object`, not only `Exception` implementations.
+- **Renamed error callback parameters from `exception` to `error`.** Overrides of `errorMessage` and `onError` should use the new name. Their method signatures and behavior are otherwise unchanged.
+- **Raised the minimum Flutter version from 3.16.0 to 3.32.0.** This aligns the declared Flutter requirement with the package's Dart 3.8 minimum.
+
+```dart
+// Before
+ErrorOperation(message: 'Failed', exception: error, stackTrace: stackTrace);
+
+// After
+ErrorOperation(message: 'Failed', error: error, stackTrace: stackTrace);
+```
+
+### New Features
+
+- **Added `copyWith` to every operation state.** Omitted fields retain their values. Explicit `null` clears nullable fields according to each state's documented type constraints.
+- **Added typed `transitionTo` helpers.** Transition between idle, loading, success, and error states without manually copying cached data. Loading, idle, and error transitions preserve current data when `data` is omitted; `data: null` clears it.
+- **Restricted concrete transition helpers to other variants.** For example, a promoted `SuccessOperation<T>` can transition to loading, idle, or error. Use `copyWith` when the variant should remain successful. A base `OperationState<T>` reference exposes every destination because its runtime variant is not statically known.
+
+```dart
+state = state.transitionTo.loading();
+state = state.transitionTo.success(data: result, message: 'Loaded');
+state = state.transitionTo.error(
+  message: 'Refresh failed',
+  error: error,
+  stackTrace: stackTrace,
+);
+```
+
+### Documentation
+
+- Expanded the README beyond widget-local and BLoC examples. It now covers mixin-owned Future and Stream lifecycles, Cubit/BLoC, ChangeNotifier and plain controllers, Riverpod/Provider-style state holders, cached refreshes, command states, explicit transitions, and rendering patterns.
+- Clarified `loadOnInit`, `listenOnInit`, idle matching, and the `async*` scope required for stream `attachMessage` calls.
+- Updated public API and bundled skill documentation for the `error` terminology and new state helpers.
+
 ## 2.0.2
 
 ### Bug Fixes
 
-- **Fixed a latent zone-key collision in `attachMessage`.** The internal zone key was declared `const Object()`, which Dart canonicalizes to a single program-wide instance, making it identical to every other `const Object()` in the program and prone to colliding with unrelated zone values. It is now a unique `final Object()`. No public API change.
+- **Fixed a latent zone-key collision in `attachMessage`.** The internal zone key was declared `const Object()`. Equivalent const expressions can be canonicalized to the same instance, allowing an unrelated zone value that used the same key expression to collide with it. It is now a unique `final Object()`. No public API change.
 
 ---
 

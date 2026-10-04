@@ -1,814 +1,491 @@
 # Flutter Operations
 
 [![Pub Version](https://img.shields.io/pub/v/flutter_operations.svg)](https://pub.dev/packages/flutter_operations)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![License: BSD-3-Clause](https://img.shields.io/badge/License-BSD--3--Clause-blue.svg)](https://opensource.org/license/bsd-3-clause)
 
-> This package emerged
-> from [Exhaustive Pattern Matching for Exhausted Flutter Developers](https://medium.com/@saadoardati/exhaustive-pattern-matching-for-exhausted-flutter-developers-cd6837459862),
-> exploring how Dart's sealed classes and switch expressions can transform async state management.
+<img src="screenshots/header.png" alt="flutter_operations: async UI with type-safe states" width="100%">
 
-A lightweight, type-safe operation state management utility for Flutter that eliminates the common dance of manually
-juggling `isLoading`, `error`, and `data` fields. Instead of relying on discipline to keep these mutually exclusive
-states in sync, this package leverages Dart's sealed classes and exhaustive pattern matching to make illegal states
-unrepresentable.
+Type-safe state for asynchronous work in Flutter.
 
-## The Problem This Solves
-
-Every Flutter developer knows this repetitive pattern:
+`flutter_operations` models each operation as one of four sealed states: idle, loading, success, or error. Use the states directly with any architecture, or add a mixin to a widget for a complete Future or Stream lifecycle with cached data, race protection, callbacks, and automatic cleanup.
 
 ```dart
-class MyWidgetState extends State<MyWidget> {
-  bool isLoading = true;
-  String? error;
-  Object? data;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadData();
-  }
-
-  Future<void> _loadData() async {
-    setState(() {
-      isLoading = true;
-      error = null;
-    });
-
-    try {
-      data = await repository.fetchData();
-      setState(() => isLoading = false);
-    } catch (e) {
-      setState(() {
-        isLoading = false;
-        error = e.toString();
-      });
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return isLoading
-        ? CircularProgressIndicator()
-        : error != null
-        ? Text('Error: $error')
-        : Text('Data: $data');
-  }
-}
+final Widget body = switch (operation) {
+  IdleOperation() => const Text('Ready'),
+  LoadingOperation(data: null) => const CircularProgressIndicator(),
+  LoadingOperation(:final data?) => DataView(data, refreshing: true),
+  SuccessOperation(:final data) => DataView(data),
+  ErrorOperation(:final message, data: null) => ErrorView(message),
+  ErrorOperation(:final message, :final data?) =>
+    DataView(data, error: message),
+};
 ```
 
-## Problems with this approach
+The compiler checks that every runtime state is handled. Loading and error states can retain the last successful value, so refreshes and temporary failures do not need to blank the screen.
 
-- **Mutually exclusive states aren't enforced**: Nothing prevents `isLoading = true` and `error != null` simultaneously
-- **Repetitive boilerplate**: This pattern is copy-pasted across dozens of widgets
-- **Error-prone**: Easy to forget updating one of the three fields during state transitions
-- **Not exhaustive**: The compiler can't verify you've handled all possible state combinations
+This package grew from [Exhaustive Pattern Matching for Exhausted Flutter Developers](https://medium.com/@saadoardati/exhaustive-pattern-matching-for-exhausted-flutter-developers-cd6837459862).
 
-## The Solution: AsyncOperationMixin and StreamOperationMixin
+## Why use it?
 
-This package transforms the above into:
+A Future or Stream is rarely only "loading" or "done." Real interfaces need to distinguish:
+
+- waiting for the user to start an action;
+- loading without data;
+- refreshing while old data remains visible;
+- success with a required, nullable, or intentionally absent result;
+- failure without data;
+- failure while cached data remains usable.
+
+Loose `isLoading`, `data`, and `error` fields can represent contradictory combinations. `OperationState<T>` cannot. Its sealed hierarchy gives each combination a name and lets Dart verify exhaustive switches.
+
+The package is useful at two levels:
+
+1. **Use `OperationState<T>` by itself.** It is a small immutable state model that works in Cubit, BLoC, Riverpod, Provider, ChangeNotifier, controllers, reducers, tests, or plain Dart classes.
+2. **Use a widget mixin.** `AsyncOperationMixin` and `StreamOperationMixin` own the lifecycle when an operation belongs to one `StatefulWidget` and a larger state-management layer would add ceremony without value.
+
+It is not a replacement for application architecture. It is a focused operation model that fits inside the architecture you already use.
+
+## Install
+
+```yaml
+dependencies:
+  flutter_operations: ^3.0.0
+```
 
 ```dart
 import 'package:flutter_operations/flutter_operations.dart';
-
-class _MyWidgetState extends State<MyWidget>
-    with AsyncOperationMixin<MyData, MyWidget> {
-
-  @override
-  Future<MyData> fetch() => repository.fetchData();
-
-  @override
-  Widget build(BuildContext context) {
-    return switch (operation) {
-      LoadingOperation(data: null) => const CircularProgressIndicator(),
-      LoadingOperation(:var data?) =>
-          Column(
-            children: [
-              Expanded(child: DataWidget(data)),
-              const LinearProgressIndicator(),
-            ],
-          ),
-      SuccessOperation(:var data) => DataWidget(data),
-      ErrorOperation(:var message, data: null) =>
-          Column(
-            children: [
-              Text('Error: $message'),
-              ElevatedButton(onPressed: reload, child: Text('Retry')),
-            ],
-          ),
-      ErrorOperation(:var message, :var data?) =>
-          Column(
-            children: [
-              DataWidget(data),
-              ErrorBanner(message),
-            ],
-          ),
-    };
-  }
-}
 ```
 
-### Benefits of this approach
+### Install the agent skill
 
-- **Type-safe**: Illegal states are impossible to represent.
-- **Exhaustive**: The compiler forces you to handle every possible state combination.
-- **Cached data support**: Show stale data during refreshes for better UX.
-- **Minimal boilerplate**: Write `fetch()` once, get full state management.
-- **Race condition protection**: Built-in generation tracking prevents outdated results from mixing with new states.
+Install the optional skill for Claude Code, Codex, Cursor, Gemini CLI, and other supported agents:
 
-## Features
+```bash
+npx skills add SaadArdati/flutter_operations --skill flutter-operations
+```
 
-- **Two specialized mixins**:
-    - `AsyncOperationMixin`: For one-time operations (API calls, database queries).
-    - `StreamOperationMixin`: For continuous streams (real-time updates, WebSocket connections).
-- **Sealed class states** with exhaustive pattern matching using `OperationState<T>`.
-- **Two distinct loading patterns**:
-    - **Autoloading** (default): `loadOnInit = true` → starts with `LoadingOperation`.
-    - **Manual loading**: `loadOnInit = false` → starts with `IdleOperation`.
-- **Optional idle state**: `IdleOperation` only exists when you need manual loading control.
-- **Convenience getters**: Check states easily with `isLoading`, `isIdle`, `isSuccess`, `isError`, etc.
-- **Automatic lifecycle management** with proper cleanup and mounted checks.
-- **Flexible UI updates** - Choose between `ValueListenableBuilder` or global widget rebuilds.
+Add `-g` for a global installation.
 
-As stated in
-the [original article](https://medium.com/@saadoardati/exhaustive-pattern-matching-for-exhausted-flutter-developers-cd6837459862):
+For Claude Code, install the plugin in one step from inside a session:
 
-> "AsyncOperationMixin is not aiming to be your next global state management solution... Instead, it's a pragmatic,
-> lightweight utility designed for a very specific and common scenario: managing the lifecycle of asynchronous
-> operations that are tightly scoped to a single widget."
+```text
+/plugin install flutter-operations --marketplace SaadArdati/flutter_operations
+```
 
-## Usage
+Or from your terminal:
 
-### AsyncOperationMixin - One-time Operations
+```bash
+claude plugin marketplace add SaadArdati/flutter_operations
+claude plugin install flutter-operations@flutter-operations
+```
 
-Perfect for screens that load data once with optional refresh capabilities. **Two patterns available:**
+## The four states
 
-#### Auto-Loading Pattern (Default)
+| State | Meaning | Data |
+|---|---|---|
+| `IdleOperation<T>` | Ready, but not actively running | Optional cached `T` |
+| `LoadingOperation<T>` | Work is in progress | Optional cached `T` |
+| `SuccessOperation<T>` | Work completed successfully | Required `T` |
+| `ErrorOperation<T>` | Work failed | Optional cached `T`, message, error, and stack trace |
 
-Most common use case - data loads immediately when the widget initializes:
+`IdleOperation<T>` extends `LoadingOperation<T>`. A `LoadingOperation()` pattern therefore matches both unless `IdleOperation()` appears first. This is intentional: screens that render idle and loading identically need only one arm.
+
+### Choose an honest result type
+
+The success payload is exactly `T`.
 
 ```dart
-import 'package:flutter_operations/flutter_operations.dart';
+OperationState<User>   // Every success contains a User.
+OperationState<User?>  // A successful lookup may contain no User.
+OperationState<void>   // The command succeeds without a meaningful value.
+```
 
-class PostsPageState extends State<PostsPage>
-    with AsyncOperationMixin<List<Post>, PostsPage> {
-  // loadOnInit defaults to true
+`SuccessOperation<User>.data` is `User`. It does not return `User?` and does not throw. For delete, logout, save, confirmation, and other command-style operations, use `void`:
 
+```dart
+final state = const SuccessOperation<void>(data: null, message: 'Deleted');
+```
+
+## Use case 1: Own a Future inside a widget
+
+Use `AsyncOperationMixin` for a request, database read, computation, permission check, command, or any other one-shot operation tied to a widget lifecycle.
+
+```dart
+class _ProfilePageState extends State<ProfilePage>
+    with AsyncOperationMixin<User, ProfilePage> {
   @override
-  Future<List<Post>> fetch() async {
-    final response = await http.get(Uri.parse('https://api.example.com/posts'));
-    if (response.statusCode != 200) {
-      throw Exception('Failed to load posts: ${response.statusCode}');
-    }
-    return Post.listFromJson(response.body);
-  }
+  Future<User> fetch() => repository.fetchUser(widget.userId);
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Posts')),
-      body: switch (operation) {
-        LoadingOperation(data: null) => const Center(child: CircularProgressIndicator()),
-        ErrorOperation(:var message, data: null) =>
-            Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(message ?? 'An error occurred'),
-                  ElevatedButton(onPressed: reload, child: const Text('Retry')),
-                ],
-              ),
-            ),
-        // Data is guaranteed to be available in all of these expressions.
-        LoadingOperation(:var data?) ||
-        ErrorOperation(:var data?) ||
-        SuccessOperation(:var data) =>
-            RefreshIndicator(
-              onRefresh: reload,
-              child: ListView.builder(
-                itemCount: data.length,
-                itemBuilder: (context, index) => PostTile(data[index]),
-              ),
-            ),
-      // No IdleOperation - starts loading immediately
+    return ValueListenableBuilder(
+      valueListenable: operationNotifier,
+      builder: (context, operation, _) => switch (operation) {
+        LoadingOperation(data: null) =>
+          const Center(child: CircularProgressIndicator()),
+        ErrorOperation(:final message, data: null) => ErrorView(
+          message: message ?? 'Could not load the profile',
+          onRetry: reload,
+        ),
+        LoadingOperation(:final data?) ||
+        ErrorOperation(:final data?) ||
+        SuccessOperation(:final data) => RefreshIndicator(
+          onRefresh: reload,
+          child: ProfileView(user: data),
+        ),
       },
     );
   }
 }
 ```
 
-#### Manual Loading Pattern
+By default, `loadOnInit` is `true`. The mixin:
 
-For search screens, user-triggered actions, or widgets that should wait for user action:
+- starts in `LoadingOperation` and calls `fetch()` after initialization;
+- publishes `SuccessOperation<T>` or `ErrorOperation<T>`;
+- preserves cached data during reloads and failures by default;
+- ignores stale completions when a newer load starts;
+- ignores completions after disposal;
+- exposes lifecycle callbacks without requiring them.
 
-```dart
-class SearchPageState extends State<SearchPage>
-    with AsyncOperationMixin<List<Post>, SearchPage> {
-  @override
-  bool get loadOnInit => false; // Start idle, wait for user action
+### Wait for user input
 
-  String _query = '';
-
-  @override
-  Future<List<Post>> fetch() => api.searchPosts(_query);
-
-  void _onSearch(String query) {
-    _query = query;
-    load(); // Manually trigger loading
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Search')),
-      body: switch (operation) {
-      // IdleOperation is relevant here
-        IdleOperation() => SearchPrompt(onSearch: _onSearch),
-        LoadingOperation() => const Center(child: CircularProgressIndicator()),
-        SuccessOperation(:var data) => SearchResults(data, onNewSearch: _onSearch),
-        ErrorOperation(:var message) => ErrorView(message, onRetry: () => load()),
-      },
-    );
-  }
-}
-```
-
-### Using Convenience Getters
-
-The package provides convenient getters for checking states without pattern matching. In practical scenarios, you will
-find these useful instead of having a dozen switch expressions in your widget build methods for simple checks.
-Switch expressions can be overkill for some cases as illustrated below.
-
-```dart
-@override
-Widget build(BuildContext context) {
-  return ElevatedButton(
-    onPressed: operation.isNotLoading ? load : null,
-    child: Text(operation.isLoading ? 'Loading...' : 'Load Data'),
-  );
-}
-```
-
-```dart
-@override
-Widget build(BuildContext context) {
-  if (operation.isLoading) {
-    return const CircularProgressIndicator();
-  }
-
-  if (operation.isError) {
-    return ErrorWidget('Something went wrong');
-  }
-
-  if (operation.isSuccess || operation.hasData) {
-    return DataWidget(operation.data);
-  }
-
-  if (operation.isIdle) {
-    return const Text('Ready to load');
-  }
-
-  return const SizedBox(); // Fallback
-}
-```
-
-Available convenience getters:
-
-- `isLoading` / `isNotLoading` - true for active loading operations.
-- `isIdle` / `isNotIdle` - **only relevant when `loadOnInit = false`**.
-- `isSuccess` / `isNotSuccess` - true for successful operations.
-- `isError` / `isNotError` - true for failed operations.
-- `hasData` / `hasNoData` - true when cached or fresh data is available.
-
-### StreamOperationMixin - Continuous Data Streams
-
-Ideal for real-time data that updates continuously:
-
-```dart
-import 'package:flutter_operations/flutter_operations.dart';
-
-class ChatPageState extends State<ChatPage>
-    with StreamOperationMixin<List<Message>, ChatPage> {
-
-  @override
-  Stream<List<Message>> stream() =>
-      FirebaseFirestore.instance
-          .collection('messages')
-          .snapshots()
-          .map((snapshot) =>
-          snapshot.docs
-              .map((doc) => Message.fromJson(doc.data()))
-              .toList());
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: ValueListenableBuilder(
-        valueListenable: operationNotifier,
-        builder: (context, operation, _) =>
-        switch (operation) {
-          IdleOperation() => const Text('Ready to connect'),
-          LoadingOperation() => const CircularProgressIndicator(),
-          ErrorOperation(:var message) => ErrorWidget(message: message),
-          SuccessOperation(:var data) => MessagesList(messages: data),
-        },
-      ),
-    );
-  }
-}
-```
-
-## Advanced Usage
-
-### Handling "Successful but No Data"
-
-Pick the type parameter that matches what the operation actually models. There is no separate empty-success state. Two patterns cover the common cases:
-
-**1. Fire-and-forget mutations (delete, logout, PIN confirm):** parameterize with `void`.
-
-```dart
-class DeleteCubit extends Cubit<OperationState<void>> {
-  // Inside the Cubit, `super()` and `emit()` both infer the operation's
-  // type argument from `OperationState<void>` — no need to repeat `<void>`.
-  DeleteCubit() : super(const IdleOperation());
-
-  Future<void> deleteItem(String id) async {
-    emit(const LoadingOperation());
-    try {
-      await api.delete(id);
-      emit(const SuccessOperation(data: null));
-    } catch (e, stack) {
-      emit(ErrorOperation(message: e.toString(), exception: e, stackTrace: stack));
-    }
-  }
-}
-
-// In the widget:
-switch (state) {
-  LoadingOperation() => const CircularProgressIndicator(),
-  SuccessOperation() => const Text('Deleted'),
-  ErrorOperation(:var message) => Text('Failed: $message'),
-  // ...
-}
-```
-
-> The `data:` argument is still required at the constructor; pass `null`. The `data` field is never read in switch arms because `void` is unreadable. The mixins (`AsyncOperationMixin<void, W>`) call `setSuccess` internally with the void result; you do not need to construct `SuccessOperation<void>` by hand if you use the mixin.
-
-**2. Legitimately optional success values:** parameterize with `T?`.
-
-```dart
-class CurrentUserCubit extends Cubit<OperationState<User?>> { ... }
-
-switch (state) {
-  SuccessOperation(data: null) => const Text('No user signed in'),
-  SuccessOperation(:var data) => UserView(data),
-  // ...
-}
-
-// Or non-pattern style:
-if (state.isSuccess && state.hasNoData) {
-  return const Text('No user signed in');
-}
-```
-
-### Using Success Messages
-
-The `SuccessOperation` includes an optional `message` field for server confirmation messages or other success-related
-information. Call `attachMessage(String)` inside `fetch()` before returning data, and the mixin will populate
-`SuccessOperation.message` automatically:
-
-```dart
-class MyState extends State<MyWidget>
-    with AsyncOperationMixin<MyData, MyWidget> {
-
-  @override
-  Future<MyData> fetch() async {
-    final response = await http.get(Uri.parse('https://api.example.com/data'));
-    final json = jsonDecode(response.body);
-
-    final data = MyData.fromJson(json['data']);
-    if (json['message'] case final String message) attachMessage(message);
-    return data;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return switch (operation) {
-      // Access message in pattern matching
-      SuccessOperation(:var data, :var message?) => Column(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            color: Colors.green.shade50,
-            child: Text(message),
-          ),
-          DataWidget(data),
-        ],
-      ),
-      // ... other cases
-    };
-  }
-}
-```
-
-You can also access the message directly:
-
-```dart
-if (operation case SuccessOperation(:final message?)) {
-  ScaffoldMessenger.of(context).showSnackBar(
-    SnackBar(content: Text(message)),
-  );
-}
-```
-
-For streams, call `attachMessage` inside `stream()` before yielding each value:
-
-```dart
-@override
-Stream<Message> stream() async* {
-  await for (final raw in chatService.messagesStream()) {
-    if (raw.serverMessage case final message?) attachMessage(message);
-    yield raw.data;
-  }
-}
-```
-
-### Managing Idle States
-
-Use `setIdle()` to put operations in a ready-but-not-loading state:
-
-```dart
-class MyState extends State<MyWidget> with AsyncOperationMixin<Data, MyWidget> {
-  @override
-  bool get loadOnInit => false; // Start in idle state
-
-  @override
-  Future<Data> fetch() => repository.getData();
-
-  @override
-  void onIdle() {
-    // Called when transitioning to idle state
-    print('Operation is now idle');
-  }
-
-  void resetToIdle() {
-    setIdle(cached: true); // Keep existing data if any
-  }
-}
-```
-
-### Choosing Update Strategies
-
-**Option 1: ValueListenableBuilder (Recommended)**
-
-```dart
-@override
-Widget build(BuildContext context) {
-  return ValueListenableBuilder(
-    valueListenable: operationNotifier,
-    builder: (context, operation, _) =>
-    switch (operation) {
-      IdleOperation(data: null) => const Text('Ready to load'),
-      LoadingOperation(data: null) => const CircularProgressIndicator(),
-      LoadingOperation(:var data?) =>
-          Column(
-            children: [
-              DataWidget(data),
-              const LinearProgressIndicator(),
-            ],
-          ),
-      SuccessOperation(:var data) => DataWidget(data),
-      ErrorOperation(:var message, data: null) => ErrorWidget(message),
-      ErrorOperation(:var message, :var data?) =>
-          Column(
-            children: [
-              DataWidget(data),
-              ErrorBanner(message)
-            ],
-          ),
-      IdleOperation(:var data?) => DataWidget(data),
-    },
-  );
-}
-```
-
-**Option 2: Global Refresh (Simple)**
-
-```dart
-class MyState extends State<MyWidget> with AsyncOperationMixin<MyData, MyWidget> {
-  @override
-  bool get globalRefresh => true;
-
-  @override
-  Future<MyData> fetch() => repository.fetchData();
-
-  @override
-  Widget build(BuildContext context) {
-    return switch (operation) {
-      IdleOperation(data: null) => const Text('Ready to load'),
-      LoadingOperation(data: null) => const CircularProgressIndicator(),
-      LoadingOperation(:var data?) =>
-          Column(
-            children: [
-              DataWidget(data),
-              const LinearProgressIndicator(),
-            ],
-          ),
-      SuccessOperation(:var data) => DataWidget(data),
-      ErrorOperation(:var message, data: null) => ErrorWidget(message),
-      ErrorOperation(:var message, :var data?) =>
-          Column(
-            children: [
-              DataWidget(data),
-              ErrorBanner(message),
-            ],
-          ),
-      IdleOperation(:var data?) => DataWidget(data),
-    };
-  }
-}
-```
-
-### Data Handling
-
-```dart
-class MyState extends State<MyWidget>
-    with AsyncOperationMixin<MyData, MyWidget> {
-
-  @override
-  String errorMessage(Object exception, StackTrace stackTrace) {
-    if (exception is NetworkException) {
-      return 'Network connection failed. Please check your internet.';
-    }
-    return 'An unexpected error occurred. Please try again.';
-  }
-
-  @override
-  void onError(Object exception, StackTrace stackTrace, {String? message}) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message ?? errorMessage(exception, stackTrace))),
-    );
-  }
-
-  @override
-  void onSuccess(MyData data) {
-    // Handle successful data retrieval
-    Analytics.trackEvent('data_loaded', {'data_length': data.length});
-  }
-
-  @override
-  void onLoading() {
-    Logger.log('Loading data for MyWidget');
-  }
-
-  @override
-  void onIdle() {
-    Logger.log('MyWidget is now idle');
-  }
-}
-```
-
-## The Four Operation States
-
-The package defines states using sealed classes, with `IdleOperation` being **optional** and only relevant for manual
-loading scenarios:
-
-### Core States (Always Present)
-
-### `LoadingOperation<T>`
-
-- Represents an ongoing operation.
-- Can optionally carry cached data from previous successful operations.
-- This is what you'll see in auto-loading widgets (`loadOnInit = true`).
-
-### `SuccessOperation<T>`
-
-- Represents a completed operation. The `data` getter returns exactly `T`: non-null when `T` is non-nullable, nullable when `T` is nullable. Never throws.
-- For "successful but no data" scenarios, parameterize with `void` (fire-and-forget) or a nullable type like `User?` (legitimately optional payload).
-- Includes an optional `message` field for success-related information (e.g., server confirmation messages separate from
-  the main data payload).
-
-### `ErrorOperation<T>`
-
-- Represents a failed operation with error details.
-- Can optionally retain cached data for graceful degradation.
-- Includes message, exception, and stack trace information.
-
-### Optional State (Manual Loading Only)
-
-### `IdleOperation<T>`
-
-- **Only exists when `loadOnInit = false`** or when explicitly set via `setIdle()`.
-- Can optionally carry cached data from previous operations.
-- Extends `LoadingOperation` but with `isIdle = true` and `isLoading = false`.
-- **Not required in pattern matching** unless your widget uses manual loading.
-
-## Two Distinct Use Cases
-
-This design elegantly handles two common scenarios:
-
-### 1. Auto-Loading Widgets (Default Behavior)
-
-```dart
-class _PostsPageState extends State<PostsPage>
-    with AsyncOperationMixin<List<Post>, PostsPage> {
-  // loadOnInit defaults to true
-
-  @override
-  Future<List<Post>> fetch() => api.getPosts();
-
-  @override
-  Widget build(BuildContext context) {
-    // No IdleOperation needed - starts loading immediately
-    return switch (operation) {
-      LoadingOperation(data: null) => const CircularProgressIndicator(),
-      LoadingOperation(:var data?) => RefreshableList(data),
-      SuccessOperation(:var data) => PostsList(data),
-      ErrorOperation(:var message) => ErrorWidget(message),
-    };
-  }
-}
-```
-
-### 2. Manual Loading Widgets
+Search, confirmation, and permission flows often should not start immediately. Return `false` from `loadOnInit` to begin in `IdleOperation`.
 
 ```dart
 class _SearchPageState extends State<SearchPage>
     with AsyncOperationMixin<List<Result>, SearchPage> {
   @override
-  bool get loadOnInit => false; // Start in idle state
+  bool get loadOnInit => false;
+
+  String query = '';
 
   @override
   Future<List<Result>> fetch() => api.search(query);
 
-  @override
-  Widget build(BuildContext context) {
-    // Now IdleOperation is relevant
-    return switch (operation) {
-      IdleOperation() => SearchPrompt(onSearch: load),
-      LoadingOperation() => const CircularProgressIndicator(),
-      SuccessOperation(:var data) => ResultsList(data),
-      ErrorOperation(:var message) => ErrorWidget(message),
-    };
+  void search(String value) {
+    query = value;
+    load(cached: false);
   }
-}
-```
 
-## Pattern Matching Examples
-
-The four sealed states unlock several distinct match styles. Pick the one that matches how much detail your UI cares about. Every pattern below is covered by a corresponding test in `test/unit/operation_state_test.dart` under "Pattern matching variants".
-
-### 1. Full fan-out (most explicit)
-
-When every state combination deserves its own widget. **IdleOperation is optional**: include it only when your widget supports manual loading.
-
-```dart
-@override
-Widget build(BuildContext context) {
-  return switch (operation) {
-    LoadingOperation(data: null) => const LoadingWidget(),
-    LoadingOperation(:var data?) =>
-        Column(
-          children: [
-            DataDisplay(data),
-            const LinearProgressIndicator(),
-          ],
-        ),
-    SuccessOperation(:var data) => DataDisplay(data),
-    ErrorOperation(:var message, data: null) => ErrorWidget(message),
-    ErrorOperation(:var message, :var data?) =>
-        Column(
-          children: [
-            DataDisplay(data),
-            ErrorBanner(message),
-          ],
-        ),
+  @override
+  Widget build(BuildContext context) => switch (operation) {
+    IdleOperation() => SearchPrompt(onSubmitted: search),
+    LoadingOperation() => const CircularProgressIndicator(),
+    SuccessOperation(:final data) => SearchResults(data),
+    ErrorOperation(:final message) => ErrorView(message: message),
   };
 }
 ```
 
-### 2. Data-presence shortcut (skip the per-state ceremony)
+Call `setIdle()` whenever the operation should return to a ready state. `setIdle(cached: true)` keeps existing data; `setIdle(cached: false)` clears it.
 
-When the UI only cares about "is there data to render?", match on the base `OperationState` and let `(:final data?)` collapse Loading-with-cache, Success, and Error-with-cache into a single arm.
+## Use case 2: Own a Stream inside a widget
+
+Use `StreamOperationMixin` for database snapshots, WebSockets, connectivity, location, sensors, or any source that can emit more than once.
+
+```dart
+class _ChatPageState extends State<ChatPage>
+    with StreamOperationMixin<List<Message>, ChatPage> {
+  @override
+  Stream<List<Message>> stream() => chatRepository.watchRoom(widget.roomId);
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder(
+      valueListenable: operationNotifier,
+      builder: (context, operation, _) => switch (operation) {
+        LoadingOperation(data: null) =>
+          const Center(child: CircularProgressIndicator()),
+        ErrorOperation(:final message, data: null) =>
+          ErrorView(message: message),
+        LoadingOperation(:final data?) ||
+        ErrorOperation(:final data?) ||
+        SuccessOperation(:final data) => MessagesList(data),
+      },
+    );
+  }
+}
+```
+
+`listenOnInit` defaults to `true`. Set it to `false` to begin idle and call `listen()` later. Calling `listen()` replaces the current subscription and starts a new generation, so late values and errors from an older generation cannot replace current state. The subscription is canceled during disposal.
+
+## Use case 3: Use the states with any state manager
+
+The sealed states do not depend on either mixin. They are useful anywhere an object exposes state.
+
+### Cubit or BLoC
+
+```dart
+class UserCubit extends Cubit<OperationState<User>> {
+  UserCubit(this.repository) : super(const IdleOperation());
+
+  final UserRepository repository;
+
+  Future<void> load() async {
+    emit(state.transitionTo.loading());
+    try {
+      final user = await repository.fetchUser();
+      emit(state.transitionTo.success(data: user));
+    } catch (error, stackTrace) {
+      emit(state.transitionTo.error(
+        message: 'Could not load the user',
+        error: error,
+        stackTrace: stackTrace,
+      ));
+    }
+  }
+}
+```
+
+### ChangeNotifier or a plain controller
+
+```dart
+class UserController extends ValueNotifier<OperationState<User>> {
+  UserController(this.repository) : super(const IdleOperation());
+
+  final UserRepository repository;
+
+  Future<void> load() async {
+    value = value.transitionTo.loading();
+    try {
+      value = value.transitionTo.success(data: await repository.fetchUser());
+    } catch (error, stackTrace) {
+      value = value.transitionTo.error(
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+  }
+}
+```
+
+The same state field can live in a Riverpod Notifier, Provider model, reducer, service, or custom controller. State propagation belongs to that architecture; `flutter_operations` supplies the operation semantics.
+
+## Use case 4: Keep content visible during refresh and failure
+
+Cached data is a first-class part of loading and error states.
+
+```dart
+Future<void> refresh() async {
+  state = state.transitionTo.loading(); // Existing data is preserved.
+  try {
+    state = state.transitionTo.success(data: await repository.fetchItems());
+  } catch (error, stackTrace) {
+    state = state.transitionTo.error(
+      message: 'Refresh failed',
+      error: error,
+      stackTrace: stackTrace,
+    ); // Existing data is still available.
+  }
+}
+```
+
+This supports stale-while-refresh interfaces without a separate cache field. Pass `data: null` when a transition must deliberately clear cached data:
+
+```dart
+state = state.transitionTo.loading(data: null);
+```
+
+## Use case 5: Model commands, not only queries
+
+Operations also describe work whose result is completion itself: save, delete, upload, logout, payment confirmation, permission requests, form submission, and navigation prerequisites.
+
+```dart
+class _SaveButtonState extends State<SaveButton>
+    with AsyncOperationMixin<void, SaveButton> {
+  @override
+  bool get loadOnInit => false;
+
+  @override
+  Future<void> fetch() async {
+    await repository.save(widget.draft);
+    attachMessage('Saved');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ElevatedButton(
+      onPressed: operation.isNotLoading ? load : null,
+      child: Text(operation.isLoading ? 'Saving...' : 'Save'),
+    );
+  }
+}
+```
+
+Use lifecycle callbacks for side effects such as analytics, snackbars, or coordination with surrounding code:
+
+```dart
+@override
+void onSuccess(void data) {
+  Navigator.of(context).pop(true);
+}
+```
+
+## Use case 6: Build explicit state transitions
+
+Every state exposes `transitionTo`. Concrete variants expose only other destinations, while an `OperationState<T>` reference exposes all destinations.
+
+```dart
+OperationState<User> state = const IdleOperation();
+
+state = state.transitionTo.loading();
+state = state.transitionTo.success(data: user, message: 'Loaded');
+state = state.transitionTo.error(message: 'Offline', error: networkError);
+state = state.transitionTo.idle();
+```
+
+Loading, idle, and error transitions preserve current data when `data` is omitted. Passing `data: null` clears it. Success always requires a value satisfying `T`.
+
+Destination availability follows the receiver's static or promoted type:
+
+```dart
+if (state case SuccessOperation<User> success) {
+  success.transitionTo.loading(); // Available.
+  success.transitionTo.error();   // Available.
+  // success.transitionTo.success(...) is intentionally unavailable.
+}
+```
+
+Use `copyWith` when the runtime variant should stay the same:
+
+```dart
+final updated = errorState.copyWith(
+  message: 'Please try again',
+  stackTrace: null,
+);
+```
+
+Omitted fields are preserved. Explicit `null` clears nullable fields, subject to the selected state's documented type constraints.
+
+## Success messages
+
+`SuccessOperation` can carry an optional message separately from its data.
+
+For an async mixin, call `attachMessage` anywhere inside the active `fetch()` flow, including after an `await`:
+
+```dart
+@override
+Future<User> fetch() async {
+  final response = await api.fetchUser();
+  if (response.message case final message?) attachMessage(message);
+  return response.user;
+}
+```
+
+For a stream mixin, call it inside an `async*` body immediately before the corresponding `yield`:
+
+```dart
+@override
+Stream<Message> stream() async* {
+  await for (final event in repository.events()) {
+    if (event.message case final message?) attachMessage(message);
+    yield event.data;
+  }
+}
+```
+
+The message is scoped to the active `load()` or `listen()` zone. Calls outside that flow are no-ops. For manually constructed states, pass `message` directly to `SuccessOperation` or `transitionTo.success`.
+
+## Rendering patterns
+
+### Full detail
+
+Use separate arms when the UI distinguishes initial loading, refresh, terminal failure, and failure with cached content.
 
 ```dart
 return switch (operation) {
-  OperationState(:final data?) => DataDisplay(data),
-  OperationState() => const LoadingWidget(),
+  IdleOperation(data: null) => const StartView(),
+  IdleOperation(:final data?) => Preview(data),
+  LoadingOperation(data: null) => const LoadingView(),
+  LoadingOperation(:final data?) => DataView(data, refreshing: true),
+  SuccessOperation(:final data) => DataView(data),
+  ErrorOperation(:final message, data: null) => ErrorView(message: message),
+  ErrorOperation(:final message, :final data?) =>
+    DataView(data, error: message),
 };
 ```
 
-Two arms, exhaustive, no nested handling. Trade-off: you lose the ability to overlay a spinner or an error banner over the cached view. Reach for this on read-only screens where Loading and Success are visually identical once data exists.
+### Data presence only
 
-### 3. OR pattern for shared rendering across state types
-
-When the data-bearing arms share rendering but you still want to fall through to a spinner for the empty cases. The `||` (or) pattern lets you spell out exactly which states carry data without giving up specificity.
+Use the base type when state identity does not affect rendering.
 
 ```dart
 return switch (operation) {
-  LoadingOperation(:var data?) ||
-  SuccessOperation(:var data) ||
-  ErrorOperation(:var data?) =>
-      RefreshIndicator(onRefresh: reload, child: DataList(data)),
-  _ => const CircularProgressIndicator(),
+  OperationState(:final data?) => DataView(data),
+  OperationState() => const LoadingView(),
 };
 ```
 
-Useful when you want the data view to remain visible during reloads and after errors, without copy-pasting the renderer.
+### Error first
 
-### 4. Error-first, then catch-all (errors win over cache)
-
-A common UX rule: an error banner should always be authoritative, even if cached data is present. Match `ErrorOperation` first; everything else flows through a generic data-presence arm.
+Put error first when it should override cached-data rendering.
 
 ```dart
 return switch (operation) {
-  ErrorOperation(:var message) => ErrorBanner(message),
-  OperationState(:final data?) => DataDisplay(data),
-  _ => const CircularProgressIndicator(),
+  ErrorOperation(:final message) => ErrorView(message: message),
+  OperationState(:final data?) => DataView(data),
+  OperationState() => const LoadingView(),
 };
 ```
 
-Order matters: Dart matches top to bottom, so the error arm is preferred even when `ErrorOperation` also carries cached `data`.
-
-### 5. Guards with `when` (branch on payload content)
-
-Use guards to branch on properties of the data without an extra `if` inside the body.
+### Payload guards
 
 ```dart
 return switch (operation) {
-  SuccessOperation(:var data) when data.isEmpty => const EmptyStateWidget(),
-  SuccessOperation(:var data) => ListView.builder(itemCount: data.length, ...),
-  LoadingOperation() => const CircularProgressIndicator(),
-  ErrorOperation(:var message) => ErrorWidget(message),
+  SuccessOperation(:final data) when data.isEmpty => const EmptyView(),
+  SuccessOperation(:final data) => ResultsView(data),
+  LoadingOperation() => const LoadingView(),
+  ErrorOperation(:final message) => ErrorView(message: message),
 };
 ```
 
-### 6. Collapse Idle into Loading (when the distinction does not matter)
-
-`IdleOperation` extends `LoadingOperation`, so matching `LoadingOperation` alone catches both. Skip the idle arm when the widget renders them identically.
-
-```dart
-return switch (operation) {
-  LoadingOperation(data: null) => const CircularProgressIndicator(),
-  LoadingOperation(:var data?) => DataDisplayWithSpinner(data),
-  SuccessOperation(:var data) => DataDisplay(data),
-  ErrorOperation(:var message, :var data?) => ErrorOverlay(data, message),
-  ErrorOperation(:var message) => ErrorWidget(message),
-};
-```
-
-If you do want them separate, match `IdleOperation` *before* `LoadingOperation`. Order matters: `LoadingOperation` would otherwise subsume `IdleOperation`.
-
-```dart
-return switch (operation) {
-  IdleOperation(data: null) => const Text('Tap to start'),
-  IdleOperation(:var data?) => ResultPreview(data),
-  LoadingOperation() => const CircularProgressIndicator(),
-  // ...
-};
-```
-
-### 7. Imperative shortcuts via getters (no switch at all)
-
-Pattern matching is not mandatory. For simple UI gates (button disabled while loading, conditional spinner overlay, etc.), boolean getters and `dataOrNull` are often clearer than a full switch.
+For small gates, the convenience getters are clearer than a switch:
 
 ```dart
 ElevatedButton(
-  onPressed: operation.isLoading ? null : reload,
-  child: operation.isLoading
-      ? const CircularProgressIndicator()
-      : const Text('Refresh'),
+  onPressed: operation.isNotLoading ? reload : null,
+  child: Text(operation.isLoading ? 'Refreshing...' : 'Refresh'),
 );
-
-// Or read the data nullably regardless of state:
-final cached = operation.dataOrNull;
-if (cached != null) return DataDisplay(cached);
-return const CircularProgressIndicator();
 ```
 
-Mix and match: use patterns for the main render branch, getters for incidental UI hints (snackbars, button states, focus management).
+Available getters include `isLoading`, `isIdle`, `isSuccess`, `isError`, their `isNot...` counterparts, `hasData`, `hasNoData`, and `dataOrNull`.
 
-## When to Use This Package
+## Mixin reference
 
-### Perfect for:
+| Purpose | Async mixin | Stream mixin |
+|---|---|---|
+| Source | `fetch()` | `stream()` |
+| Start automatically | `loadOnInit` | `listenOnInit` |
+| Start or restart | `load()` / `reload()` | `listen()` |
+| Publish success manually | `setSuccess()` | `setData()` |
+| Success callback | `onSuccess()` | `onData()` |
+| Completion callback | Not applicable | `onDone()` |
 
-- **Simple data loading screens**: User profiles, settings pages, static content.
-- **User-triggered operations**: Use manual loading pattern (`loadOnInit = false`).
-- **One-off dialogs or bottom sheets**: That need to fetch some data.
-- **Prototype development**: Where you need quick async state management.
-- **Coexisting with larger solutions**: Use alongside complete state management solutions for lightweight isolated
-  components.
+Both mixins also expose:
 
-### Consider alternatives when:
+- `operation` and `operationNotifier`;
+- `setIdle`, `setLoading`, and `setError`;
+- `onIdle`, `onLoading`, and `onError`;
+- `errorMessage` for display-message formatting;
+- `globalRefresh`, which defaults to `false`.
 
-- **Multiple coordinated operations**: Need to manage several interdependent async calls.
-- **Complex business logic**: Requires sophisticated state machines or business rules.
-- **Already using a standardized solution**: Consistency across your app is more valuable than the benefits here.
-- **Advanced features needed**: Sophisticated caching, offline support, complex data synchronization.
+With the default `globalRefresh: false`, rebuild only the listening subtree with `ValueListenableBuilder`. Set it to `true` only when the entire owning widget must rebuild on each transition.
+
+## Scope and trade-offs
+
+Use this package when one operation benefits from explicit lifecycle state and exhaustive handling. It works especially well for:
+
+- page and component data loading;
+- pull-to-refresh with cached content;
+- search and user-triggered work;
+- form submissions and command buttons;
+- Firestore, WebSocket, sensor, and connectivity streams;
+- local controllers and existing state-management systems;
+- tests that need precise operation-state assertions.
+
+Use a larger state machine or orchestration layer when several operations must coordinate atomically, when offline synchronization is the main problem, or when the domain has many states that are not meaningfully idle/loading/success/error. You can still use `OperationState<T>` for individual operations inside that larger model.
 
 ## Contributing
 
-Contributions are welcome! This package emerged from real-world usage patterns and continues to evolve based on more
-use cases are identified.
-
-If you have ideas, improvements, or bug fixes, please open an issue or submit a pull request.
-
+Issues and pull requests are welcome at [github.com/SaadArdati/flutter_operations](https://github.com/SaadArdati/flutter_operations).

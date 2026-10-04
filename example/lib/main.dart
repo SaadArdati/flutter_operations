@@ -382,8 +382,8 @@ class _AdvancedCustomHandlersExampleState
 
   /// Advanced error categorization and custom messages
   @override
-  String errorMessage(Object exception, StackTrace stackTrace) {
-    final message = exception.toString();
+  String errorMessage(Object error, StackTrace stackTrace) {
+    final message = error.toString();
 
     if (message.contains('Circuit breaker is open')) {
       return 'Service temporarily unavailable. Cooling down...';
@@ -399,8 +399,8 @@ class _AdvancedCustomHandlersExampleState
     return 'An unexpected error occurred. Please try again.';
   }
 
-  ErrorCategory _categorizeError(Object exception) {
-    final message = exception.toString();
+  ErrorCategory _categorizeError(Object error) {
+    final message = error.toString();
     if (message.contains('Circuit breaker is open')) {
       return ErrorCategory.circuitBreaker;
     }
@@ -437,13 +437,13 @@ class _AdvancedCustomHandlersExampleState
   }
 
   @override
-  void onError(Object exception, StackTrace stackTrace, {String? message}) {
-    super.onError(exception, stackTrace, message: message);
+  void onError(Object error, StackTrace stackTrace, {String? message}) {
+    super.onError(error, stackTrace, message: message);
     _consecutiveFailures++;
 
-    final category = _categorizeError(exception);
+    final category = _categorizeError(error);
     _addEvent(
-      'ERROR: ${message ?? exception.toString()} [Category: ${category.name}]',
+      'ERROR: ${message ?? error.toString()} [Category: ${category.name}]',
     );
 
     if (_consecutiveFailures >= 3 && !_circuitBreakerOpen) {

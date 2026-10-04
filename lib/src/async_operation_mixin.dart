@@ -84,12 +84,12 @@ mixin AsyncOperationMixin<T, K extends StatefulWidget> on State<K> {
       );
       if (!mounted || _generation != currentGeneration) return;
       setSuccess(result, message: cell.value);
-    } catch (exception, stackTrace) {
+    } catch (error, stackTrace) {
       if (!mounted || _generation != currentGeneration) return;
       setError(
-        exception,
+        error,
         stackTrace,
-        message: errorMessage(exception, stackTrace),
+        message: errorMessage(error, stackTrace),
         cached: cached,
       );
     }
@@ -98,6 +98,10 @@ mixin AsyncOperationMixin<T, K extends StatefulWidget> on State<K> {
   /// Convenience method to reload data.
   FutureOr<void> reload({bool cached = true}) => load(cached: cached);
 
+  /// Updates the state to idle.
+  ///
+  /// Preserves current data when [cached] is `true`, invokes [onIdle], and
+  /// rebuilds the widget when [globalRefresh] is enabled.
   void setIdle({bool cached = true}) {
     final lastData = cached ? operationNotifier.value.data : null;
     final newOp = IdleOperation<T>(data: lastData);
@@ -149,17 +153,17 @@ mixin AsyncOperationMixin<T, K extends StatefulWidget> on State<K> {
     if (cell case MessageCell cell?) cell.value = message;
   }
 
-  /// Updates the state to error with the provided exception details.
+  /// Updates the state to error with the provided error details.
   void setError(
-    Object exception,
+    Object error,
     StackTrace stackTrace, {
     String? message,
     bool cached = true,
   }) {
     final lastData = cached ? operationNotifier.value.data : null;
     final errorOp = ErrorOperation<T>(
-      message: message ?? errorMessage(exception, stackTrace),
-      exception: exception,
+      message: message ?? errorMessage(error, stackTrace),
+      error: error,
       stackTrace: stackTrace,
       data: lastData,
     );
@@ -169,23 +173,22 @@ mixin AsyncOperationMixin<T, K extends StatefulWidget> on State<K> {
     }
 
     operationNotifier.value = errorOp;
-    onError(exception, stackTrace, message: message);
+    onError(error, stackTrace, message: message);
 
     if (mounted && globalRefresh) setState(() {});
   }
 
-  /// Converts an exception and stack trace into a human-readable error message.
+  /// Converts an error and stack trace into a human-readable error message.
   /// Override to provide custom error message formatting.
-  String errorMessage(Object exception, StackTrace stackTrace) =>
-      exception.toString();
+  String errorMessage(Object error, StackTrace stackTrace) => error.toString();
 
   /// Called when an error occurs. Override for custom error handling.
-  void onError(Object exception, StackTrace stackTrace, {String? message}) {
+  void onError(Object error, StackTrace stackTrace, {String? message}) {
     developer.log(
-      message ?? errorMessage(exception, stackTrace),
-      name: 'AsyncOperationMixin',
-      error: exception,
+      message ?? errorMessage(error, stackTrace),
+      error: error,
       stackTrace: stackTrace,
+      name: 'AsyncOperationMixin',
     );
   }
 

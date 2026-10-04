@@ -216,17 +216,17 @@ void main() {
 
     group('ErrorOperation', () {
       test('should create error state with all details', () {
-        final exception = Exception('Test exception');
+        final error = Exception('Test error');
         final stackTrace = StackTrace.current;
         final state = ErrorOperation<TestData>(
           message: 'Error occurred',
-          exception: exception,
+          error: error,
           stackTrace: stackTrace,
           data: TestData('cached'),
         );
 
         expect(state.message, equals('Error occurred'));
-        expect(state.exception, equals(exception));
+        expect(state.error, equals(error));
         expect(state.stackTrace, equals(stackTrace));
         expect(state.data?.value, equals('cached'));
         expect(state.hasData, isTrue);
@@ -237,7 +237,7 @@ void main() {
         const state = ErrorOperation<TestData>(message: 'Error occurred');
 
         expect(state.message, equals('Error occurred'));
-        expect(state.exception, isNull);
+        expect(state.error, isNull);
         expect(state.stackTrace, isNull);
         expect(state.data, isNull);
         expect(state.hasData, isFalse);
@@ -245,17 +245,17 @@ void main() {
       });
 
       test('should handle equality correctly', () {
-        final exception = Exception('Test');
+        final error = Exception('Test');
         final stackTrace = StackTrace.current;
 
         final state1 = ErrorOperation<TestData>(
           message: 'Error',
-          exception: exception,
+          error: error,
           stackTrace: stackTrace,
         );
         final state2 = ErrorOperation<TestData>(
           message: 'Error',
-          exception: exception,
+          error: error,
           stackTrace: stackTrace,
         );
         final state3 = ErrorOperation<TestData>(message: 'Different error');

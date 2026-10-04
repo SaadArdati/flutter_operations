@@ -192,9 +192,9 @@ class _MockAsyncWidgetState extends State<MockAsyncWidget>
   }
 
   @override
-  void onError(Object exception, StackTrace stackTrace, {String? message}) {
-    super.onError(exception, stackTrace, message: message);
-    widget.onErrorOverride?.call(exception, stackTrace, message: message);
+  void onError(Object error, StackTrace stackTrace, {String? message}) {
+    super.onError(error, stackTrace, message: message);
+    widget.onErrorOverride?.call(error, stackTrace, message: message);
   }
 
   @override
@@ -210,11 +210,11 @@ class _MockAsyncWidgetState extends State<MockAsyncWidget>
   }
 
   @override
-  String errorMessage(Object exception, StackTrace stackTrace) {
+  String errorMessage(Object error, StackTrace stackTrace) {
     if (widget.errorMessageOverride != null) {
-      return widget.errorMessageOverride!(exception, stackTrace);
+      return widget.errorMessageOverride!(error, stackTrace);
     }
-    return super.errorMessage(exception, stackTrace);
+    return super.errorMessage(error, stackTrace);
   }
 
   void _setError() {
@@ -344,9 +344,9 @@ class _MockStreamWidgetState extends State<MockStreamWidget>
   }
 
   @override
-  void onError(Object exception, StackTrace stackTrace, {String? message}) {
-    super.onError(exception, stackTrace, message: message);
-    widget.onErrorOverride?.call(exception, stackTrace, message: message);
+  void onError(Object error, StackTrace stackTrace, {String? message}) {
+    super.onError(error, stackTrace, message: message);
+    widget.onErrorOverride?.call(error, stackTrace, message: message);
   }
 
   @override

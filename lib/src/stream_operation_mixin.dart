@@ -67,7 +67,9 @@ mixin StreamOperationMixin<T, K extends StatefulWidget> on State<K> {
   Stream<T> stream();
 
   /// Starts listening to the stream and manages subscription lifecycle.
-  /// Cancels existing subscription and creates a new one.
+  ///
+  /// Initiates cancellation of the current subscription, then creates its
+  /// replacement. Late events from an older subscription are ignored.
   ///
   /// Wraps the [stream] subscription in a [Zone] holding a per-call
   /// [MessageCell]. Any [attachMessage] calls made inside [stream]
@@ -89,24 +91,24 @@ mixin StreamOperationMixin<T, K extends StatefulWidget> on State<K> {
             cell.value = null;
             setData(value, message: msg);
           },
-          onError: (exception, stackTrace) {
+          onError: (error, stackTrace) {
             if (!mounted || _generation != currentGeneration) return;
             setError(
-              exception,
+              error,
               stackTrace,
-              message: errorMessage(exception, stackTrace),
+              message: errorMessage(error, stackTrace),
               cached: cached,
             );
           },
           onDone: onDone,
         );
       }, zoneValues: {messageKey: cell});
-    } catch (exception, stackTrace) {
+    } catch (error, stackTrace) {
       if (!mounted || _generation != currentGeneration) return;
       setError(
-        exception,
+        error,
         stackTrace,
-        message: errorMessage(exception, stackTrace),
+        message: errorMessage(error, stackTrace),
         cached: cached,
       );
     }
@@ -121,6 +123,10 @@ mixin StreamOperationMixin<T, K extends StatefulWidget> on State<K> {
     if (cell case MessageCell cell?) cell.value = message;
   }
 
+  /// Updates the state to idle.
+  ///
+  /// Preserves current data when [cached] is `true`, invokes [onIdle], and
+  /// rebuilds the widget when [globalRefresh] is enabled.
   void setIdle({bool cached = true}) {
     final lastData = cached ? operationNotifier.value.data : null;
     final newOp = IdleOperation<T>(data: lastData);
@@ -165,17 +171,17 @@ mixin StreamOperationMixin<T, K extends StatefulWidget> on State<K> {
     if (mounted && globalRefresh) setState(() {});
   }
 
-  /// Updates the state to error with the provided exception details.
+  /// Updates the state to error with the provided error details.
   void setError(
-    Object exception,
+    Object error,
     StackTrace stackTrace, {
     String? message,
     bool cached = true,
   }) {
     final lastData = cached ? operationNotifier.value.data : null;
     final errorOp = ErrorOperation<T>(
-      message: message ?? errorMessage(exception, stackTrace),
-      exception: exception,
+      message: message ?? errorMessage(error, stackTrace),
+      error: error,
       stackTrace: stackTrace,
       data: lastData,
     );
@@ -185,22 +191,21 @@ mixin StreamOperationMixin<T, K extends StatefulWidget> on State<K> {
     }
 
     operationNotifier.value = errorOp;
-    onError(exception, stackTrace, message: message);
+    onError(error, stackTrace, message: message);
 
     if (mounted && globalRefresh) setState(() {});
   }
 
-  /// Converts an exception and stack trace into a human-readable error message.
+  /// Converts an error and stack trace into a human-readable error message.
   /// Override to provide custom error message formatting.
-  String errorMessage(Object exception, StackTrace stackTrace) =>
-      exception.toString();
+  String errorMessage(Object error, StackTrace stackTrace) => error.toString();
 
   /// Called when an error occurs. Override for custom error handling.
-  void onError(Object exception, StackTrace stackTrace, {String? message}) {
+  void onError(Object error, StackTrace stackTrace, {String? message}) {
     developer.log(
-      message ?? errorMessage(exception, stackTrace),
+      message ?? errorMessage(error, stackTrace),
       name: 'StreamOperationMixin',
-      error: exception,
+      error: error,
       stackTrace: stackTrace,
     );
   }

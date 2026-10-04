@@ -1,204 +1,152 @@
 ---
 name: flutter-operations
-description: Use when writing or modifying Dart/Flutter code that imports `package:flutter_operations/flutter_operations.dart`. Triggers on wiring AsyncOperationMixin or StreamOperationMixin onto a State, designing exhaustive switches over OperationState, choosing the type parameter T (non-nullable, nullable, or void), or propagating cached data through Loading and Error states.
+description: Use when writing or modifying Dart or Flutter code that imports `package:flutter_operations/flutter_operations.dart`, including widget-owned Future or Stream work, operation state in Bloc, Cubit, Riverpod, Provider, ChangeNotifier, controllers or services, cached refresh UI, command state, exhaustive matching, state transitions, or choosing T as non-nullable, nullable, or void.
 license: BSD-3-Clause
-authors:
-  - Saad Ardati
-repository: https://github.com/SaadArdati/flutter_operations
-homepage: https://pub.dev/packages/flutter_operations
-keywords:
-  - dart
-  - flutter
-  - async
-  - result-type
-  - sealed-class
-  - state-management
-  - stream
-  - pattern-matching
-categories:
-  - development
-  - dart
-  - flutter
 metadata:
-  version: 2.0.1
+  author: Saad Ardati
+  version: "3.0.0"
+  repository: https://github.com/SaadArdati/flutter_operations
+  homepage: https://pub.dev/packages/flutter_operations
+  keywords: dart, flutter, async, result-type, sealed-class, state-management, stream, pattern-matching
+  category: development
 ---
 
 # flutter_operations
 
-Type-safe async operation state for Flutter using sealed classes and exhaustive pattern matching. Four states (Idle, Loading, Success, Error), two mixins (one-shot and streaming), one rule: the operation's payload type `T` is what the developer wrote. Nothing is injected, nothing throws on read, nothing has to be unboxed at the call site.
+`flutter_operations` is both:
 
-## The entire point: make bugs unrepresentable, don't guard against them
+1. an architecture-neutral `OperationState<T>` model for any state holder; and
+2. two widget lifecycle mixins for Futures and Streams owned by one `StatefulWidget`.
 
-This is the thesis of the package, and it must govern every line you write with it or add to it. The goal is never "catch the bug at runtime" — it is "arrange the types and scopes so the bug cannot be written in the first place." A guard you have to remember is a bug you haven't removed yet.
+Do not reduce it to a Bloc helper or assume a mixin is always required. It models requests, refreshes, searches, commands, submissions, uploads, permissions, subscriptions, database listeners, WebSockets, sensors, and any other work with an idle/loading/success/error lifecycle.
 
-The package earns this claim three times over, and each is a template for the kind of change that belongs here:
+## Required discovery pass
 
-1. **Illegal *states* are unrepresentable.** `isLoading` + `error` + `data` as loose fields let you represent "loading and errored with data," a state that means nothing. The sealed `OperationState<T>` hierarchy makes that combination impossible to construct — the compiler, not discipline, enforces it.
-2. **A lying *type* is unrepresentable.** 1.x had `SuccessOperation.empty()`: a `data` getter typed non-null `T` that threw at runtime. The type promised what the runtime broke. 2.0 deletes the flag and the throw; `SuccessOperation<T>.data` returns exactly `T`, and the constructor (`required T super.data`) makes `SuccessOperation<User>(data: null)` a *compile* error. The invariant moved from a stack trace to a squiggly line.
-3. **Illegal *interleavings* are unrepresentable.** The optional success message rides a per-`load()` `Zone` cell, not a shared instance field. Two concurrent fetches cannot cross-talk because they never share a mailbox — there is no clearing logic to get wrong, because the sharing itself does not exist.
+Before writing code, answer these three questions.
 
-The through-line: sealed classes made illegal states unrepresentable; an honest `T` made lying types unrepresentable; zone-scoped cells made illegal interleavings unrepresentable. **The same philosophy, applied to shape, to type, and to time.**
+### 1. Who owns the state?
 
-### What this means when you write or extend code here
+- A single `StatefulWidget` owns the operation: consider a mixin.
+- Cubit, Bloc, Riverpod, Provider, ChangeNotifier, a controller, reducer, service, or plain Dart object already owns state: store `OperationState<T>` directly. Do not force a widget mixin into an external state holder.
 
-- Prefer a type that forbids the bad value over a runtime check that rejects it. `<User?>` / `<void>` over an `empty` flag; `required T` over a throwing getter.
-- Prefer a scope that forbids the bad sharing over a guard that cleans up after it. A per-call cell over a shared field with reset logic.
-- Reach for the type parameter before reaching for a new field, method, or flag. Most "I need to model X" is already spellable in `T` (non-nullable, nullable, or `void`).
-- If you are adding a runtime `throw`, an `assert`, or a "you must remember to…" doc line, stop: that is the shape of the bug the package exists to delete. Find the version where the mistake cannot compile.
-- When you cannot make something unrepresentable, say so plainly (see the `attachMessage` zone boundaries below) rather than papering over it.
+### 2. How many values can the source produce?
 
-## When to use
+- One completion: `AsyncOperationMixin<T, Widget>` or manual `OperationState<T>` transitions.
+- Repeated values: `StreamOperationMixin<T, Widget>` or an external subscription that publishes `OperationState<T>`.
 
-- Writing or modifying Dart code that imports `package:flutter_operations/flutter_operations.dart`.
-- Adding `AsyncOperationMixin<T, K>` or `StreamOperationMixin<T, K>` to a `State<K>`.
-- Designing the switch over `OperationState<T>` in a widget's `build`.
-- Choosing the type parameter `T`: a non-nullable type (`User`), a legitimately-nullable type (`User?`), or fire-and-forget (`void`).
-- Propagating cached data across state transitions (Loading-with-cache, Error-with-cache).
+### 3. What does success mean?
 
-## Boundaries
+- Success always has a value: `T`, such as `User`.
+- A meaningful value may legitimately be absent: `T?`, such as `User?`.
+- Completion is the result: `void`, such as save, delete, logout, submit, upload, or permission confirmation.
 
-- Widget-scoped utility. Not Bloc, Provider, or Riverpod. Each mixin owns one operation per `State` via a `ValueNotifier`. For cross-screen state, host an `OperationState<T>` field inside whatever state manager the app already uses; this package gives you the type, not the propagation.
-- No retry, debounce, or cancellation primitives ship with the package. Generation-based race protection is internal to the mixin; exposed only via `reload()` (one-shot) or `listen()` (stream).
-- Do not invent APIs not in `lib/src/`. If a primitive seems missing, surface the gap.
+Then read [use-cases.md](use-cases.md) for the matching integration recipe. Read [patterns.md](patterns.md) when designing rendering, cached-data behavior, `copyWith`, or `transitionTo`. Read [anti-patterns.md](anti-patterns.md) before finalizing manually managed states.
 
-## The five sealed types
+## Capability map
 
-```
+| Need | Use |
+|---|---|
+| Widget-owned API request, database read, computation, permission, or command | `AsyncOperationMixin` |
+| Widget-owned Firestore, WebSocket, connectivity, location, or sensor source | `StreamOperationMixin` |
+| Existing Bloc, Cubit, Riverpod, Provider, or controller | `OperationState<T>` directly |
+| Wait for user input before starting | `loadOnInit => false` or `listenOnInit => false` |
+| Keep content visible while refreshing | Loading state with cached data |
+| Keep content usable after a failed refresh | Error state with cached data |
+| Save, delete, logout, submit, or upload | `OperationState<void>` or `AsyncOperationMixin<void, W>` |
+| Change to another runtime state | `state.transitionTo.<destination>()` |
+| Update fields without changing the runtime state | `state.copyWith(...)` |
+| Attach a success message in a mixin | `attachMessage(...)` inside the active source flow |
+| Attach a success message outside a mixin | `SuccessOperation(message: ...)` or `transitionTo.success(message: ...)` |
+| Render every state safely | Exhaustive Dart pattern matching |
+| Gate a button or read cached data incidentally | `isLoading`, `isNotLoading`, `dataOrNull`, and related getters |
+
+## State model
+
+```text
 sealed OperationState<T>
-  |
-  +-- base LoadingOperation<T>      // in progress, optional cached T?
-  |     |
-  |     +-- final IdleOperation<T>  // ready but not actively loading
-  |
-  +-- final SuccessOperation<T>     // data: T exactly (non-null iff T is non-nullable)
-  +-- final ErrorOperation<T>       // message, exception, stackTrace, optional cached T?
+  +-- base LoadingOperation<T>      optional cached T
+  |     +-- final IdleOperation<T>  ready, not actively loading
+  +-- final SuccessOperation<T>     required data: T
+  +-- final ErrorOperation<T>       optional cached T, message, error, stackTrace
 ```
 
-`IdleOperation extends LoadingOperation`. Matching `LoadingOperation` in a switch subsumes Idle unless Idle is matched first.
+`IdleOperation` extends `LoadingOperation`. A `LoadingOperation()` pattern includes idle unless an `IdleOperation()` arm appears first.
 
-Base `OperationState<T>` getters: `data` (T?), `dataOrNull` (T?, same as data), `hasData`, `hasNoData`, `isLoading`, `isIdle`, `isSuccess`, `isError` (plus negations).
+`SuccessOperation<T>.data` is exactly `T`. It never throws and does not widen a non-nullable type.
 
-`SuccessOperation<T>.data` overrides to return exactly `T`. For `<User>`, non-null. For `<User?>`, may be null. For `<void>`, the field exists but is unreadable; the case is still matchable. Never throws.
+Every state has:
 
-## Choose T
+- `data`, `dataOrNull`, `hasData`, and `hasNoData`;
+- `isIdle`, `isLoading`, `isSuccess`, `isError`, and their negations;
+- `copyWith` for preserving the current variant;
+- `transitionTo` for creating another variant.
 
-```
-operation always produces a value on success?
-  yes -> T = the concrete value type (e.g. <User>)
-  no, value may be absent this time -> T = nullable (e.g. <User?>)
-  no, operation never returns anything (delete, logout, fire-and-forget) -> T = void
-```
+Loading, idle, and error transitions preserve current data when `data` is omitted. Explicit `data: null` clears it. A success transition always requires `data: T`.
 
-The decision lives at the call site. `T` speaks for itself.
+Concrete variants expose only other destinations. A base `OperationState<T>` exposes all destinations because its runtime variant is not statically known.
 
-## Pick a mixin
-
-```
-one-shot operation (HTTP call, DB query)?
-  -> AsyncOperationMixin<T, K extends StatefulWidget> on State<K>
-     Override fetch().
-
-continuous stream (WebSocket, listener)?
-  -> StreamOperationMixin<T, K extends StatefulWidget> on State<K>
-     Override stream().
-```
-
-Both expose `operation: OperationState<T>` (via `operationNotifier: ValueNotifier<OperationState<T>>`), the `loadOnInit`/`listenOnInit` toggle (default `true`), `globalRefresh` (default `false`), and the same setter/callback surface. Naming differs slightly:
+## Mixin selection
 
 | Concept | Async mixin | Stream mixin |
 |---|---|---|
-| Emit success | `setSuccess(T data, {String? message})` | `setData(T value, {String? message})` |
-| React to success | `onSuccess(T data)` | `onData(T value)` |
-| Drive a run | `load()` / `reload({cached})` | `listen({cached})` |
-| Attach a success message | `attachMessage(String)` (call from inside fetch) | `attachMessage(String)` (call before each yield) |
+| Source override | `fetch()` | `stream()` |
+| Start automatically | `loadOnInit` | `listenOnInit` |
+| Start or restart | `load()` / `reload()` | `listen()` |
+| Publish success manually | `setSuccess()` | `setData()` |
+| Success callback | `onSuccess()` | `onData()` |
+| Source completion | Not applicable | `onDone()` |
 
-Shared: `setError(Object e, StackTrace s, {String? message, bool cached})`, `setIdle({cached})`, `setLoading({cached})`, `onError`, `onIdle`, `onLoading`, `errorMessage(e, s)`.
+Both mixins expose `operation`, `operationNotifier`, `setIdle`, `setLoading`, `setError`, `onIdle`, `onLoading`, `onError`, `errorMessage`, `attachMessage`, and `globalRefresh`.
 
-For an optional success message, call `attachMessage(String)` from inside `fetch` or `stream` (the latter before each `yield`). The string becomes `SuccessOperation.message` on the resulting state.
+The mixins already guard async completions against disposal and stale generations. Do not add redundant mounted or generation guards around their internal lifecycle. Code in consumer callbacks must still follow normal Flutter safety when it performs its own asynchronous work or uses `BuildContext`.
 
-`attachMessage` is backed by a per-call `Zone` value, so it only captures when called from code running inside the fetch/stream's own async flow (direct calls, `await` continuations, `async*` bodies, `.map`/`.where` transforms on the subscribed stream). It is a silent no-op when called from another isolate (`compute`), from a callback the platform schedules on the root zone, or outside a `load()`/`listen()` altogether. When constructing an `OperationState` by hand (e.g. inside a Cubit), skip `attachMessage` and pass `SuccessOperation(data: ..., message: ...)` directly.
+`globalRefresh` defaults to `false`. Prefer a `ValueListenableBuilder` around the affected subtree. Enable global refresh only when the entire owning widget must rebuild for each transition.
 
-## Pattern matching
+## Success messages
 
-Several useful styles. Pick the one that matches how much detail the UI needs.
+In `AsyncOperationMixin`, call `attachMessage` inside the active `fetch()` flow, including after awaits.
 
-**Full fan-out:** every state has its own arm.
+In `StreamOperationMixin`, call it inside an `async*` body immediately before the matching `yield`.
+
+Calls outside the active `load()` or `listen()` zone are no-ops. For manually managed states, pass the message directly when constructing or transitioning to success.
+
+## Hard rules
+
+1. Choose `T` from the meaning of success, not from the current UI.
+2. Preserve cached data during loading and error unless clearing it is intentional.
+3. Use `transitionTo` for another variant and `copyWith` for the same variant.
+4. Match `IdleOperation` before `LoadingOperation` when their UI differs.
+5. Use `error:`, never the removed `exception:` argument or field.
+6. Do not invent retry, debounce, cancellation, or orchestration APIs. The package does not provide them.
+7. Do not claim `setIdle()` cancels a stream subscription. It changes operation state only.
+8. Do not use `attachMessage` for manually managed state.
+9. Do not add a mixin when an existing state holder already owns the operation.
+10. Keep UI side effects out of render branches. Use lifecycle callbacks or the surrounding architecture's listener mechanism.
+
+## Quick example
 
 ```dart
-switch (operation) {
-  LoadingOperation(data: null) => const CircularProgressIndicator(),
-  LoadingOperation(:var data?) => Stack(children: [DataView(data), const LinearProgressIndicator()]),
-  SuccessOperation(:var data) => DataView(data),
-  ErrorOperation(:var message, data: null) => ErrorBanner(message),
-  ErrorOperation(:var message, :var data?) => Stack(children: [DataView(data), ErrorBanner(message)]),
+OperationState<User> state = const IdleOperation();
+
+Future<void> refresh() async {
+  state = state.transitionTo.loading();
+  try {
+    state = state.transitionTo.success(data: await repository.fetchUser());
+  } catch (error, stackTrace) {
+    state = state.transitionTo.error(
+      message: 'Refresh failed',
+      error: error,
+      stackTrace: stackTrace,
+    );
+  }
 }
 ```
 
-**Data-presence shortcut:** when the UI only cares whether data exists.
+This works inside Cubit, Bloc, Riverpod, Provider, ChangeNotifier, a controller, a reducer, a service, or plain Dart. See [use-cases.md](use-cases.md) for widget mixins, streams, commands, and architecture-specific examples.
 
-```dart
-switch (operation) {
-  OperationState(:final data?) => DataView(data),
-  OperationState() => const CircularProgressIndicator(),
-}
-```
+## Source of truth
 
-**OR-pattern aggregation:** shared renderer across data-bearing states.
-
-```dart
-switch (operation) {
-  LoadingOperation(:var data?) || SuccessOperation(:var data) || ErrorOperation(:var data?) =>
-      RefreshIndicator(onRefresh: reload, child: DataList(data)),
-  _ => const CircularProgressIndicator(),
-}
-```
-
-**Error-first then catch-all:** errors win over cached data.
-
-```dart
-switch (operation) {
-  ErrorOperation(:var message) => ErrorBanner(message),
-  OperationState(:final data?) => DataView(data),
-  _ => const CircularProgressIndicator(),
-}
-```
-
-**Guards with `when`:** branch on payload content.
-
-```dart
-switch (operation) {
-  SuccessOperation(:var data) when data.isEmpty => const EmptyStateView(),
-  SuccessOperation(:var data) => ListView(...),
-  LoadingOperation() => const CircularProgressIndicator(),
-  ErrorOperation(:var message) => ErrorBanner(message),
-}
-```
-
-**Collapsing Idle into Loading:** if the screen renders them the same, just match `LoadingOperation`. If they differ, put `IdleOperation` first (subtype matches first).
-
-**Imperative shortcuts:** for button-disabled gates and one-off reads, `operation.isLoading` and `operation.dataOrNull` are cleaner than a switch.
-
-## Conventions
-
-1. **`T` is honest.** If the operation may return null, write `<T?>`. If it never returns a value, write `<void>`. Pick the type parameter that matches what the operation actually produces.
-2. **`SuccessOperation<T>.data` is exactly `T`.** For `<User>`, `User`. For `<User?>`, `User?`. For `<void>`, unreadable but matchable. Never throws.
-3. **Cached data lives on Loading and Error, not Success.** `LoadingOperation(data: state.dataOrNull)` and `ErrorOperation(message: '...', data: state.dataOrNull)` keep stale data visible during reloads and failures. Success always carries fresh data.
-4. **Override `fetch()` (async) or `stream()` (streaming) exactly once.** Both are abstract; the analyzer flags missing overrides at compile time.
-5. **`IdleOperation` extends `LoadingOperation`.** Order matters: `IdleOperation` arms must precede `LoadingOperation` if they render differently. Otherwise omit `IdleOperation` entirely; `LoadingOperation` catches both.
-6. **Pattern-match in widgets, getters for incidental UI.** Switch for the main render branch. `state.isLoading` / `state.dataOrNull` for button gates, snackbars, focus management.
-7. **The mixin guards `mounted` and generation tracking internally.** Do not duplicate those checks around `setSuccess` / `setData` / `setError` calls.
-8. **`globalRefresh: true`** rebuilds the whole widget on every state change. Default is `false` (only `ValueListenableBuilder` listeners update). Stay on the default unless non-listening parts of the tree also need to rebuild.
-
-## Anti-pattern index
-
-Symptom in code -> see `anti-patterns.md`.
-
-- `LoadingOperation()` emitted with no data when prior state had cache -> #1
-
-## Source pointers
-
-- `lib/src/operation_state.dart`
-- `lib/src/async_operation_mixin.dart`
-- `lib/src/stream_operation_mixin.dart`
-- `example/lib/main.dart` (five runnable scenarios)
-- `test/unit/operation_state_test.dart` (pattern-matching variants and equality semantics)
+- Public API: `lib/src/operation_state.dart`, `lib/src/helpers.dart`, `lib/src/async_operation_mixin.dart`, `lib/src/stream_operation_mixin.dart`
+- Integration recipes: [use-cases.md](use-cases.md)
+- Rendering and transition recipes: [patterns.md](patterns.md)
+- Common mistakes: [anti-patterns.md](anti-patterns.md)

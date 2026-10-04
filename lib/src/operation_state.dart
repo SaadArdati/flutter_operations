@@ -1,8 +1,14 @@
+library;
+
+part 'helpers.dart';
+
+enum _CopySentinel { unset }
+
 /// Represents the state of an asynchronous operation.
 ///
 /// Four runtime variants exist and can be matched exhaustively with Dart 3's
 /// sealed classes:
-/// * [IdleOperation]: _Ready_ but not-loading state. This only
+/// * [IdleOperation]: Ready but not-loading state. This only
 ///   appears when `loadOnInit / listenOnInit` is set to `false` or when
 ///   `setIdle()` is called manually. It can still carry cached data.
 /// * [LoadingOperation]: Operation in progress (optionally with cached
@@ -11,8 +17,8 @@
 /// * [SuccessOperation]: Operation finished successfully. The [data]
 ///   getter returns exactly `T`: non-null when `T` is non-nullable, nullable
 ///   when `T` is nullable. For operations that succeed without a meaningful
-///   value (delete, logout, fire-and-forget), parameterize with `void` or a
-///   nullable type.
+///   value (delete, logout, fire-and-forget), parameterize with `void`. Use a
+///   nullable type when a meaningful result may legitimately be absent.
 /// * [ErrorOperation]: Operation failed. Cached data from a previous
 ///   success is preserved when available for graceful degradation.
 ///
@@ -21,10 +27,16 @@
 /// switch (state) {
 ///   IdleOperation() => const Text('Ready'),
 ///   LoadingOperation(data: null) => const CircularProgressIndicator(),
-///   LoadingOperation(:var data?) => Stack(children:[DataView(data), const LinearProgressIndicator()]),
+///   LoadingOperation(:var data?) => Stack(children: [
+///     DataView(data),
+///     const LinearProgressIndicator(),
+///   ]),
 ///   SuccessOperation(:var data) => DataView(data),
 ///   ErrorOperation(:var message, data: null) => ErrorBanner(message),
-///   ErrorOperation(:var message, :var data?) => Stack(children:[DataView(data), ErrorBanner(message)]),
+///   ErrorOperation(:var message, :var data?) => Stack(children: [
+///     DataView(data),
+///     ErrorBanner(message),
+///   ]),
 /// }
 /// ```
 sealed class OperationState<T> {
@@ -44,9 +56,6 @@ sealed class OperationState<T> {
   /// [SuccessOperation], this is [SuccessOperation.data] widened to `T?`,
   /// which is convenient when handling all states uniformly without pattern
   /// matching.
-  ///
-  /// This let's you do: operation.dataOrNull without checking the runtime type
-  /// for a guaranteed vs nullable value.
   T? get dataOrNull => _data;
 
   /// Whether this state has associated data.
@@ -82,13 +91,32 @@ sealed class OperationState<T> {
   /// A convenience getter to check if the operation has not encountered an
   /// error.
   bool get isNotError => !isError;
+
+  /// Copies this state, preserving omitted fields.
+  ///
+  /// Passing `data: null` clears data, except for [SuccessOperation] when
+  /// `T` is non-nullable, in which case the existing data is preserved.
+  OperationState<T> Function({T? data}) get copyWith => _copyWith;
+
+  OperationState<T> _copyWith({Object? data = _CopySentinel.unset});
 }
 
 /// Represents an operation that is currently in progress.
 /// Can optionally carry cached data from a previous successful operation.
 base class LoadingOperation<T> extends OperationState<T> {
-  /// Creates a loading state with optional cached data and idle flag.
+  /// Creates a loading state with optional cached data.
   const LoadingOperation({super.data});
+
+  /// Copies this loading state, preserving omitted fields.
+  /// Passing `data: null` clears cached data.
+  @override
+  LoadingOperation<T> Function({T? data}) get copyWith => _copyWith;
+
+  @override
+  LoadingOperation<T> _copyWith({Object? data = _CopySentinel.unset}) =>
+      LoadingOperation<T>(
+        data: identical(data, _CopySentinel.unset) ? this.data : data as T?,
+      );
 
   @override
   bool operator ==(Object other) {
@@ -110,6 +138,17 @@ base class LoadingOperation<T> extends OperationState<T> {
 final class IdleOperation<T> extends LoadingOperation<T> {
   /// Creates an idle loading state with optional cached data.
   const IdleOperation({super.data});
+
+  /// Copies this idle state, preserving omitted fields.
+  /// Passing `data: null` clears cached data.
+  @override
+  IdleOperation<T> Function({T? data}) get copyWith => _copyWith;
+
+  @override
+  IdleOperation<T> _copyWith({Object? data = _CopySentinel.unset}) =>
+      IdleOperation<T>(
+        data: identical(data, _CopySentinel.unset) ? this.data : data as T?,
+      );
 
   @override
   String toString() => 'IdleOperation(data: $data)';
@@ -148,10 +187,28 @@ final class SuccessOperation<T> extends OperationState<T> {
   final String? message;
 
   /// The data associated with the successful operation.
-  ///
-  /// Returns exactly `T`, mirroring the type parameter. Never throws.
+  /// Returns exactly `T`, mirroring the type parameter.
   @override
   T get data => _data as T;
+
+  /// Copies this success state, preserving omitted fields.
+  ///
+  /// Passing `message: null` clears the message. Passing `data: null` is
+  /// valid only when `T` accepts null; otherwise the old data is preserved.
+  @override
+  SuccessOperation<T> Function({T? data, String? message}) get copyWith =>
+      _copyWith;
+
+  @override
+  SuccessOperation<T> _copyWith({
+    Object? data = _CopySentinel.unset,
+    Object? message = _CopySentinel.unset,
+  }) => SuccessOperation<T>(
+    data: !identical(data, _CopySentinel.unset) && data is T ? data : this.data,
+    message: identical(message, _CopySentinel.unset)
+        ? this.message
+        : message as String?,
+  );
 
   @override
   bool operator ==(Object other) {
@@ -172,36 +229,60 @@ final class SuccessOperation<T> extends OperationState<T> {
 /// Can optionally retain cached data from a previous successful operation.
 final class ErrorOperation<T> extends OperationState<T> {
   /// Creates an error state with the specified error details.
-  const ErrorOperation({
-    this.message,
-    this.exception,
-    this.stackTrace,
-    super.data,
-  });
+  const ErrorOperation({this.message, this.error, this.stackTrace, super.data});
 
   /// Human-readable error message for display to users.
   final String? message;
 
-  /// The exception object that caused the error.
-  final Object? exception;
+  /// The error object that caused the error.
+  final Object? error;
 
   /// Stack trace from when the error occurred.
   final StackTrace? stackTrace;
+
+  /// Copies this error state, preserving omitted fields.
+  /// Passing `null` explicitly clears the corresponding field.
+  @override
+  ErrorOperation<T> Function({
+    T? data,
+    String? message,
+    Object? error,
+    StackTrace? stackTrace,
+  })
+  get copyWith => _copyWith;
+
+  @override
+  ErrorOperation<T> _copyWith({
+    Object? data = _CopySentinel.unset,
+    Object? message = _CopySentinel.unset,
+    Object? error = _CopySentinel.unset,
+    Object? stackTrace = _CopySentinel.unset,
+  }) => ErrorOperation<T>(
+    data: identical(data, _CopySentinel.unset) ? this.data : data as T?,
+    message: identical(message, _CopySentinel.unset)
+        ? this.message
+        : message as String?,
+    error: identical(error, _CopySentinel.unset) ? this.error : error,
+    stackTrace: identical(stackTrace, _CopySentinel.unset)
+        ? this.stackTrace
+        : stackTrace as StackTrace?,
+  );
 
   @override
   bool operator ==(Object other) {
     if (identical(this, other)) return true;
     return other is ErrorOperation<T> &&
         other.message == message &&
-        other.exception == exception &&
+        other.error == error &&
         other.stackTrace == stackTrace &&
         other.data == data;
   }
 
   @override
-  int get hashCode => Object.hash(message, exception, stackTrace, data);
+  int get hashCode => Object.hash(message, error, stackTrace, data);
 
   @override
   String toString() =>
-      'ErrorOperation(message: $message, exception: $exception, stackTrace: $stackTrace, data: $data)';
+      'ErrorOperation(message: $message, error: $error, '
+      'stackTrace: $stackTrace, data: $data)';
 }

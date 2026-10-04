@@ -8,8 +8,8 @@
     {
       "name": "flutter-operations",
       "source": "./skills",
-      "description": "Operation-state authoring skill for package:flutter_operations/flutter_operations.dart. Load when wiring AsyncOperationMixin or StreamOperationMixin, designing exhaustive matches over OperationState, choosing the type parameter T for the operation, or propagating cached data through Loading and Error states.",
-      "version": "2.0.0",
+      "description": "Operation-state authoring skill for package:flutter_operations/flutter_operations.dart. Use for widget-owned Future and Stream lifecycles, OperationState in any state manager, cached refreshes, commands, transitions, and exhaustive rendering.",
+      "version": "3.0.0",
       "author": {
         "name": "Saad Ardati"
       },

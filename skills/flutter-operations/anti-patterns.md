@@ -2,20 +2,18 @@
 
 Shapes the type system and analyzer will not catch on their own.
 
-These exist because the package's guarantee is "illegal states are unrepresentable," not "illegal *usage* is impossible." Everything below is a place where a human can still hand-write a value the types would never have produced — cached data dropped on a manual `emit`, a type argument restated so it drifts. The fix is always the same reflex the package is built on: let `T` and the mixin produce the state, and don't reintroduce by hand the mistakes the design already deleted.
-
 ## 1. Dropping cached data on transitions
 
-Manually emitting a fresh `LoadingOperation<T>()` or `ErrorOperation<T>(message: ...)` without data inside a Cubit or Bloc throws away cached state. Pull-to-refresh feels broken; the screen flashes empty before the new payload arrives.
+Manually emitting a fresh `LoadingOperation<T>()` or `ErrorOperation<T>(message: ...)` without data throws away cached state. Pull-to-refresh feels broken; the screen flashes empty before the new payload arrives.
 
-Inside the mixins this is handled automatically: `setLoading(cached: true)` and `setError(..., cached: true)` (both defaults) propagate `state.dataOrNull` into the new state. Manual `emit` calls outside the mixin need to do it themselves:
+Inside the mixins this is handled automatically: `setLoading(cached: true)` and `setError(..., cached: true)` (both defaults) propagate `state.dataOrNull` into the new state. Manual calls outside the mixin need to do it themselves:
 
 ```dart
 emit(LoadingOperation(data: state.dataOrNull));
 // ...
 emit(ErrorOperation(
-  message: e.toString(),
-  exception: e,
+  message: 'error_screen_translation_key',
+  error: e,
   stackTrace: st,
   data: state.dataOrNull,
 ));

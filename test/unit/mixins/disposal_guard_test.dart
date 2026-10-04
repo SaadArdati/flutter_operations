@@ -2,8 +2,8 @@
 library;
 
 import 'package:flutter/material.dart';
-import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_operations/flutter_operations.dart' as ops;
+import 'package:flutter_test/flutter_test.dart';
 
 import '../../helpers/test_helpers.dart';
 
@@ -35,9 +35,9 @@ class _DisposalWidgetState extends State<_DisposalWidget>
   }
 
   @override
-  void onError(Object exception, StackTrace stackTrace, {String? message}) {
+  void onError(Object error, StackTrace stackTrace, {String? message}) {
     errorCalls += 1;
-    super.onError(exception, stackTrace, message: message);
+    super.onError(error, stackTrace, message: message);
   }
 
   @override

@@ -368,11 +368,11 @@ void main() {
           find.byType(TestAsyncWidget),
         );
 
-        final exception = Exception('Test exception');
+        final error = Exception('Test error');
         final stackTrace = StackTrace.current;
-        final message = state.errorMessage(exception, stackTrace);
+        final message = state.errorMessage(error, stackTrace);
 
-        expect(message, contains('Test exception'));
+        expect(message, contains('Test error'));
       });
     });
 
