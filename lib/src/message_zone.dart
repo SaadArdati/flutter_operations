@@ -1,7 +1,14 @@
 /// Internal storage for the optional success message attached during a
-/// single fetch / listen call. The mixin creates one cell per call and
+/// single run / listen call. The engine creates one cell per call and
 /// installs it in a Zone; user code calls `attachMessage` to write to it.
 class MessageCell {
+  /// Creates message storage scoped to [owner].
+  MessageCell({this.owner});
+
+  /// Identity of the operation allowed to attach messages.
+  final Object? owner;
+
+  /// Pending message, consumed by the owning operation.
   String? value;
 }
 

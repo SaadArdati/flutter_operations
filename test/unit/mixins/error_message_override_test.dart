@@ -17,7 +17,7 @@ class _ErrorMessageWidget extends StatefulWidget {
 }
 
 class _ErrorMessageWidgetState extends State<_ErrorMessageWidget>
-    with ops.AsyncOperationMixin<TestData, _ErrorMessageWidget> {
+    with ops.AsyncOperationStateMixin<TestData, _ErrorMessageWidget> {
   String? lastErrorMessage;
 
   @override

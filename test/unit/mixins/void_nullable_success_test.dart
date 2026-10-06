@@ -20,7 +20,7 @@ class _VoidWidget extends StatefulWidget {
 }
 
 class _VoidWidgetState extends State<_VoidWidget>
-    with AsyncOperationMixin<void, _VoidWidget> {
+    with AsyncOperationStateMixin<void, _VoidWidget> {
   void testAttach(String message) => attachMessage(message);
 
   @override
@@ -40,7 +40,7 @@ class _NullableWidget extends StatefulWidget {
 }
 
 class _NullableWidgetState extends State<_NullableWidget>
-    with AsyncOperationMixin<String?, _NullableWidget> {
+    with AsyncOperationStateMixin<String?, _NullableWidget> {
   @override
   Future<String?> fetch() => widget.behavior();
 
@@ -81,7 +81,7 @@ Future<_NullableWidgetState> _pumpNullable(
 }
 
 void main() {
-  group('AsyncOperationMixin<void>', () {
+  group('AsyncOperationStateMixin<void>', () {
     testWidgets('fire-and-forget fetch reaches SuccessOperation<void>', (
       tester,
     ) async {
@@ -109,7 +109,7 @@ void main() {
     });
   });
 
-  group('AsyncOperationMixin<String?>', () {
+  group('AsyncOperationStateMixin<String?>', () {
     testWidgets('a null result is an honest SuccessOperation with null data', (
       tester,
     ) async {

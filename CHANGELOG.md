@@ -1,3 +1,33 @@
+## 4.0.0
+
+### Breaking changes
+
+- Renamed the widget Future mixin to `AsyncOperationStateMixin<T, Widget>`. The name `AsyncOperationMixin<T>` now denotes a host-neutral mixin; existing widgets should rename their mixin, not simply remove a type argument.
+- Widget Future `globalRefresh` now schedules whole-widget rebuilding before lifecycle callbacks. Notifier publication already preceded callbacks in 3.x and retains that ordering.
+- Raised the Dart SDK minimum to 3.12. Use a Flutter SDK bundling Dart 3.12 or newer.
+- Renamed the widget stream mixin to `StreamOperationStateMixin<T, Widget>` and added host-neutral `StreamOperationMixin<T>` with explicit publication and awaitable disposal.
+- Stream widget `listen` now returns `Future<void>` and waits for previous cleanup; added awaitable `cancel`. Async cleanup failures surface to callers (or the widget disposal zone).
+
+### Execution and integration
+
+- Extracted `Operation<T>` as the shared state-publication base for async and stream engines. Reactive hooks, cached transitions, error formatting, and message attachment share one implementation; execution and cleanup remain separate.
+
+- Added `StreamOperation<T>` for standalone subscriptions, serialized cancellation, latest-restart generation guards, scoped emission messages, reactive hooks, and awaitable cleanup. The widget stream mixin now delegates to it.
+- Added `AsyncOperation<T>` for host-owned Future or synchronous work, cached transitions, latest/first concurrency policies, cancellation of result publication, disposal guards, and run-scoped messages.
+- Added constructor callbacks and overridable `onRead` / `onChanged(previous, next)` hooks for reactive adapters. Change notification occurs once per unequal transition, before lifecycle callbacks.
+- Added host-neutral `AsyncOperationMixin<T>` with `fetch`, `load`/`reload`, state setters, `cancel`, explicit disposal, and read/change hooks.
+- Added an overridable `operationController` for specialized or injected controllers. The default controller is lazily created; supplied controllers own their callbacks and lifecycle configuration.
+- Scoped async message attachment to the receiving operation, preventing cross-operation message attachment.
+- Retained direct `OperationState<T>` usage and widget stream lifecycle ownership under the renamed State adapter.
+
+### Examples and guidance
+
+- Added standalone, widget, Cubit, Riverpod, Provider, Signals, and MobX integrations for Future and Stream execution, including direct-state, composition, and host-mixin comparisons.
+- Organized runnable examples under `example/lib/async/` and `example/lib/stream/`; added a local documentation site under `docs/`.
+- Added MobX inheritance with `Store`, Atom bridges, computed projections, reusable reactive mixins, getter overrides, and controller injection examples.
+- Reworked the bundled agent skill for 4.0, including framework recipes, ownership boundaries, reactive limitations, null-pattern guidance, and a 3.x migration guide.
+- Added execution and integration regression coverage for cancellation, disposal, reactive publication, callback order, and injected ownership.
+
 ## 3.0.0
 
 This release expands `OperationState<T>` into a complete standalone state model while keeping both widget mixins available for lifecycle-owned Future and Stream work.

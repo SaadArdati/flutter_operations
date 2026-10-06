@@ -433,9 +433,7 @@ void main() {
           final labels = operations
               .map(
                 (op) => switch (op) {
-                  LoadingOperation(:final data?) ||
-                  SuccessOperation(:final data) ||
-                  ErrorOperation(:final data?) => 'show $data',
+                  OperationState(:final data?) => 'show $data',
                   _ => 'spinner',
                 },
               )

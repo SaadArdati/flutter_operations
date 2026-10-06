@@ -1,0 +1,72 @@
+name: Deploy Pages
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  deployments: write
+
+jobs:
+  site:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: deploy-site-${{ github.ref }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: docs/package-lock.json
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: '3.47.4'
+          cache: true
+
+      - name: Install docs dependencies
+        working-directory: docs
+        run: npm ci
+
+      - name: Check docs
+        working-directory: docs
+        run: npm run check
+
+      - name: Build docs
+        working-directory: docs
+        env:
+          DOCS_SITE: https://flutter-operations.saad-ardati.dev
+        run: npm run build
+
+      - name: Resolve example dependencies
+        working-directory: example
+        run: flutter pub get
+
+      - name: Build demo
+        working-directory: example
+        run: flutter build web --release --base-href=/demo/
+
+      - name: Combine docs and demo
+        run: |
+          mkdir -p docs/dist/demo
+          cp -R example/build/web/. docs/dist/demo/
+
+      # Fork PRs build without access to deployment secrets.
+      - name: Deploy site
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: >-
+            pages deploy docs/dist
+            --project-name=flutter-operations-docs
+            --branch=${{ github.head_ref || github.ref_name }}
+            --commit-hash=${{ github.sha }}

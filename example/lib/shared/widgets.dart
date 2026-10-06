@@ -28,9 +28,9 @@ class UserCard extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 if (isRefreshing) ...[
-                  const Text(
+                  Text(
                     'Refreshing...',
-                    style: TextStyle(color: Colors.blue),
+                    style: Theme.of(context).textTheme.labelLarge,
                   ),
                   const SizedBox(height: 16),
                 ],
@@ -46,15 +46,16 @@ class UserCard extends StatelessWidget {
                 const SizedBox(height: 16),
                 Text(
                   user.name,
-                  style: const TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                  ),
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.headlineSmall,
                 ),
                 const SizedBox(height: 8),
                 Text(
                   user.email,
-                  style: const TextStyle(fontSize: 16, color: Colors.grey),
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
                 ),
               ],
             ),
@@ -90,6 +91,7 @@ class LoadingStateWidget extends StatelessWidget {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
         children: [
           const CircularProgressIndicator(),
           const SizedBox(height: 16),
@@ -123,16 +125,26 @@ class ErrorStateWidget extends StatelessWidget {
         width: double.infinity,
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: Colors.red.shade50,
-          border: Border.all(color: Colors.red.shade200),
+          color: Theme.of(context).colorScheme.errorContainer,
+          border: Border.all(
+            color: Theme.of(context).colorScheme.errorContainer,
+          ),
           borderRadius: BorderRadius.circular(8),
         ),
         child: Row(
           children: [
-            const Icon(Icons.warning, color: Colors.red),
+            Icon(
+              Icons.warning_amber_outlined,
+              color: Theme.of(context).colorScheme.onErrorContainer,
+            ),
             const SizedBox(width: 8),
             Expanded(
-              child: Text(message, style: const TextStyle(color: Colors.red)),
+              child: Text(
+                message,
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onErrorContainer,
+                ),
+              ),
             ),
             if (onRetry != null)
               TextButton(onPressed: onRetry, child: const Text('Retry')),
@@ -150,15 +162,20 @@ class ErrorStateWidget extends StatelessWidget {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.error_outline, size: 64, color: Colors.red),
+          Icon(
+            Icons.error_outline,
+            size: 48,
+            color: Theme.of(context).colorScheme.error,
+          ),
           const SizedBox(height: 16),
           Text(title, style: Theme.of(context).textTheme.headlineSmall),
           const SizedBox(height: 8),
           Text(
             message,
             textAlign: TextAlign.center,
-            style: const TextStyle(color: Colors.red),
+            style: TextStyle(color: Theme.of(context).colorScheme.error),
           ),
           const SizedBox(height: 24),
           if (onRetry != null) ...[

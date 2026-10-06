@@ -17,7 +17,7 @@ class _MessageWidget extends StatefulWidget {
 }
 
 class _MessageWidgetState extends State<_MessageWidget>
-    with AsyncOperationMixin<String, _MessageWidget> {
+    with AsyncOperationStateMixin<String, _MessageWidget> {
   /// Test-only hook (public) that invokes the @protected attachMessage from
   /// within the subclass, preserving the production contract.
   void testAttach(String message) => attachMessage(message);

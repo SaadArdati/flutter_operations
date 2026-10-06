@@ -1,0 +1,104 @@
+---
+title: Async work is more than loading
+description: Model requests, refreshes, and live updates without rebuilding state and lifecycle machinery in every controller.
+---
+
+`flutter_operations` provides typed state and lifecycle management for asynchronous work in Flutter. It supports requests, commands, refreshes, and live subscriptions within an existing state-management architecture.
+
+An asynchronous interface needs to distinguish loading, success, and failure while retaining previously loaded data when appropriate. Its execution layer must define which overlapping request can publish a result and prevent pending work from updating a disposed owner.
+
+These responsibilities are separate from rendering. Independent loading, data, and error fields do not constrain valid combinations, and a state snapshot does not reject stale completions. Stream subscriptions also require explicit cancellation and cleanup before a replacement is established.
+
+The package separates the state model from execution and lifecycle ownership. You can use the state types alone, compose an execution controller, or adopt a host or widget mixin.
+
+## Give each state a name
+
+`flutter_operations` models one operation with four typed states.
+
+- **Idle** represents an operation that is ready to start, optionally with cached data.
+- **Loading** represents work in progress, optionally retaining the last result.
+- **Error** represents a failure, with diagnostics and optional cached data.
+- **Success** represents a result with the declared payload type.
+
+Loading and error do not have to mean an empty screen. A previous result can remain visible while the operation refreshes or waits for recovery.
+
+Dart checks that your UI handles every state.
+
+```dart
+// state is OperationState<User>.
+return switch (state) {
+  IdleOperation(data: null) => const StartView(),
+  LoadingOperation(data: null) => const LoadingView(),
+  ErrorOperation(data: null, :final message) =>
+    ErrorView(message ?? 'Unable to load user'),
+  OperationState(:final data?) => ProfileView(data),
+};
+```
+
+This renderer intentionally shares the content view across success and cached states. Keep separate branches when refresh indicators or error banners should also appear. A nullable result or completion-only command needs explicit successful-null handling; data presence alone does not define success.
+
+The package grew from [Exhaustive Pattern Matching for Exhausted Flutter Developers](https://medium.com/@saadoardati/exhaustive-pattern-matching-for-exhausted-flutter-developers-cd6837459862). Its original goal was to represent async UI states with types that the compiler can check.
+
+## Manage execution independently
+
+Typed snapshots solve the rendering problem. They do not, by themselves, prevent a stale request from overwriting a newer result.
+
+`AsyncOperation<T>` supplies that execution layer.
+
+```dart
+final user = AsyncOperation<User>(
+  onChanged: (_, next) => publish(next),
+  errorMessage: (_, _) => 'Unable to load user',
+);
+
+await user.run(repository.fetchUser);
+```
+
+The operation publishes loading, success, or error, retains cached data by default, and rejects obsolete completions. A newer run wins by default; a `first` policy can instead ignore overlapping calls. Canceling or disposing the owner invalidates pending results without aborting the underlying request.
+
+For live updates, `StreamOperation<T>` owns the subscription.
+
+```dart
+final updates = StreamOperation<User>(
+  onChanged: (_, next) => publish(next),
+  errorMessage: (_, _) => 'Unable to update user',
+);
+
+await updates.listen(repository.watchUser);
+// At the owner's lifecycle boundary:
+await updates.dispose();
+```
+
+It rejects stale subscription events and waits for cancellation before establishing a replacement. Data errors can be followed by recovery; natural completion keeps the last state. Cleanup failures remain visible to the caller.
+
+Dispose either engine when its owner finishes. Use the matching widget adapter when Flutter should handle startup, rebuilding, and disposal for you.
+
+## Keep your state manager
+
+This is not another application architecture. It handles one operation inside the architecture you already use.
+
+A Cubit can emit operation snapshots. A Riverpod Notifier can publish them as its state. Provider and Signals can notify their listeners. MobX can track operation reads and changes through an Atom. The core has no dependency on any of those libraries.
+
+Choose the layer that matches your ownership requirements.
+
+1. **Use `OperationState<T>` directly** if execution and lifecycle are already handled elsewhere.
+2. **Compose an operation** for reusable execution or several independent requests and subscriptions.
+3. **Use a host mixin** for one operation with a `fetch()` or `stream()` method and explicit host disposal.
+4. **Use a widget adapter** when one Flutter widget owns the work.
+
+You do not need to adopt all four.
+
+## Where to start
+
+| Your next step | Guide |
+| --- | --- |
+| Make a first request | [Installation & first operation](start/installation/) |
+| Pick composition, a mixin, or direct state | [Choose an owner](start/ownership/) |
+| Render cached data, empty results, and successful null | [State & rendering](concepts/state/) |
+| Understand request execution | [AsyncOperation API](reference/async-operation/) |
+| Own a live subscription | [StreamOperation API](reference/stream-operation/) |
+| Connect your state manager | [Integration map](integrations/overview/) |
+| Explore runnable comparisons | [Example catalog](guides/examples/) |
+| Upgrade an existing app | [Migration to 4.0](guides/migration/) |
+
+The package does not provide retries, debounce, queues, offline synchronization, or HTTP abort. Keep those policies in the layer that owns them. Guide names such as `User`, `repository`, `ProfileView`, and `publish` are application code, not package APIs.

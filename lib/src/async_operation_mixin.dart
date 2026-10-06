@@ -3,186 +3,94 @@ import 'dart:developer' as developer;
 
 import 'package:flutter/widgets.dart';
 
-import 'message_zone.dart';
+import 'async_operation.dart';
 import 'operation_state.dart';
 
-/// A mixin that adds asynchronous state management to a [StatefulWidget].
+/// Adds one asynchronous operation to any host object.
 ///
-/// Handles one-time asynchronous operations with idle, loading,
-/// success, and error states.
-/// Unlike [StreamOperationMixin], which is intended for infinite data streams, this
-/// mixin is perfect for discrete fetch operations that have a clear start and
-/// end (e.g. HTTP requests, database reads, dialogs).
-///
-///
-/// Example:
-/// ```dart
-/// class _PostsState extends State<PostsPage>
-///     with AsyncOperationMixin<List<Post>, PostsPage> {
-///   @override
-///   Future<List<Post>> fetch() async {
-///     return await api.getPosts();
-///   }
-/// }
-/// ```
-mixin AsyncOperationMixin<T, K extends StatefulWidget> on State<K> {
-  /// Notifier that broadcasts the current operation state.
-  late final ValueNotifier<OperationState<T>> operationNotifier;
+/// Hosts own their lifecycle and must call [disposeOperation] when finished.
+mixin AsyncOperationMixin<T> {
+  late final AsyncOperation<T> _operation = AsyncOperation<T>(
+    initialState: initialOperationState,
+    onRead: operationRead,
+    onChanged: operationChanged,
+    errorMessage: errorMessage,
+    onLoading: onLoading,
+    onSuccess: onSuccess,
+    onError: onError,
+    onIdle: onIdle,
+  );
 
-  /// Generation counter to prevent race conditions in concurrent operations.
-  int _generation = 0;
+  /// The owned operation used by every state read and command.
+  ///
+  /// Overrides must return one stable instance. [disposeOperation] disposes it.
+  /// A supplied operation owns its configuration and callbacks; the default
+  /// host hooks are wired only by the default implementation.
+  AsyncOperation<T> get operationController => _operation;
+
+  /// Called whenever the default operation state is read.
+  void operationRead() {}
+
+  /// The initial operation state.
+  OperationState<T> get initialOperationState => IdleOperation<T>();
 
   /// The current operation state.
-  OperationState<T> get operation => operationNotifier.value;
+  OperationState<T> get operation => operationController.state;
 
-  /// Whether to automatically load data when initialized.
-  /// Defaults to `true`.
-  bool get loadOnInit => true;
-
-  /// Whether the entire widget rebuilds on state changes.
-  /// Defaults to `false`.
-  bool get globalRefresh => false;
-
-  @override
-  void initState() {
-    super.initState();
-    operationNotifier = ValueNotifier<OperationState<T>>(
-      loadOnInit ? LoadingOperation<T>() : IdleOperation<T>(),
-    );
-
-    if (loadOnInit) {
-      Future.microtask(load);
-    }
-  }
-
-  @override
-  void dispose() {
-    operationNotifier.dispose();
-    super.dispose();
-  }
-
-  /// Fetches the data for this widget.
-  ///
-  /// Override this method to provide the data for this operation.
+  /// Fetches the data for this operation.
   FutureOr<T> fetch();
 
-  /// Handles the complete loading lifecycle with race condition protection.
-  ///
-  /// Wraps the [fetch] call in a [Zone] holding a per-call [MessageCell].
-  /// Any [attachMessage] calls made inside [fetch] (sync or after awaits)
-  /// write to that cell; the message is then paired with the result on
-  /// the resulting [SuccessOperation].
-  FutureOr<void> load({bool cached = true}) async {
-    final currentGeneration = ++_generation;
-    setLoading(cached: cached);
-
-    final cell = MessageCell();
-    try {
-      final result = await runZoned(
-        () => fetch(),
-        zoneValues: {messageKey: cell},
-      );
-      if (!mounted || _generation != currentGeneration) return;
-      setSuccess(result, message: cell.value);
-    } catch (error, stackTrace) {
-      if (!mounted || _generation != currentGeneration) return;
-      setError(
-        error,
-        stackTrace,
-        message: errorMessage(error, stackTrace),
-        cached: cached,
-      );
-    }
-  }
+  /// Runs [fetch] with race protection and state transitions.
+  Future<void> load({bool cached = true}) =>
+      operationController.run(fetch, cached: cached);
 
   /// Convenience method to reload data.
-  FutureOr<void> reload({bool cached = true}) => load(cached: cached);
+  Future<void> reload({bool cached = true}) => load(cached: cached);
 
   /// Updates the state to idle.
-  ///
-  /// Preserves current data when [cached] is `true`, invokes [onIdle], and
-  /// rebuilds the widget when [globalRefresh] is enabled.
-  void setIdle({bool cached = true}) {
-    final lastData = cached ? operationNotifier.value.data : null;
-    final newOp = IdleOperation<T>(data: lastData);
-    if (newOp == operationNotifier.value) {
-      return;
-    }
-
-    operationNotifier.value = newOp;
-    onIdle();
-
-    if (mounted && globalRefresh) setState(() {});
-  }
+  void setIdle({bool cached = true}) =>
+      operationController.setIdle(cached: cached);
 
   /// Updates the state to loading.
-  void setLoading({bool cached = true}) {
-    final lastData = cached ? operationNotifier.value.data : null;
-    final newOp = LoadingOperation<T>(data: lastData);
-    if (newOp == operationNotifier.value) {
-      return;
-    }
+  void setLoading({bool cached = true}) =>
+      operationController.setLoading(cached: cached);
 
-    operationNotifier.value = newOp;
-    onLoading();
+  /// Updates the state to success.
+  void setSuccess(T data, {String? message}) =>
+      operationController.setSuccess(data, message: message);
 
-    if (mounted && globalRefresh) setState(() {});
-  }
-
-  /// Updates the state to success with the provided data.
-  void setSuccess(T data, {String? message}) {
-    if (operationNotifier.value case SuccessOperation(
-      data: final oldData,
-      message: final oldMessage,
-    ) when oldData == data && oldMessage == message) {
-      return;
-    }
-
-    operationNotifier.value = SuccessOperation<T>(data: data, message: message);
-    onSuccess(data);
-
-    if (mounted && globalRefresh) setState(() {});
-  }
-
-  /// Attaches an optional message to the success state produced by the
-  /// current [fetch] call. Safe to call from anywhere inside [fetch],
-  /// including after awaits. Outside a [load] call this is a no-op.
-  @protected
-  void attachMessage(String message) {
-    final cell = Zone.current[messageKey];
-    if (cell case MessageCell cell?) cell.value = message;
-  }
-
-  /// Updates the state to error with the provided error details.
+  /// Updates the state to error.
   void setError(
     Object error,
     StackTrace stackTrace, {
     String? message,
     bool cached = true,
-  }) {
-    final lastData = cached ? operationNotifier.value.data : null;
-    final errorOp = ErrorOperation<T>(
-      message: message ?? errorMessage(error, stackTrace),
-      error: error,
-      stackTrace: stackTrace,
-      data: lastData,
-    );
+  }) => operationController.setError(
+    error,
+    stackTrace,
+    message: message,
+    cached: cached,
+  );
 
-    if (errorOp == operationNotifier.value) {
-      return;
-    }
+  /// Attaches a message to the success produced by the current [fetch].
+  @protected
+  void attachMessage(String message) =>
+      operationController.attachMessage(message);
 
-    operationNotifier.value = errorOp;
-    onError(error, stackTrace, message: message);
+  /// Prevents future state changes from current work and becomes idle.
+  void cancel({bool cached = true}) =>
+      operationController.cancel(cached: cached);
 
-    if (mounted && globalRefresh) setState(() {});
-  }
+  /// Disposes the owned operation.
+  void disposeOperation() => operationController.dispose();
 
-  /// Converts an error and stack trace into a human-readable error message.
-  /// Override to provide custom error message formatting.
+  /// Called immediately after the operation state changes.
+  void operationChanged(OperationState<T> previous, OperationState<T> next) {}
+
+  /// Converts an error into a human-readable message.
   String errorMessage(Object error, StackTrace stackTrace) => error.toString();
 
-  /// Called when an error occurs. Override for custom error handling.
+  /// Called when an error occurs.
   void onError(Object error, StackTrace stackTrace, {String? message}) {
     developer.log(
       message ?? errorMessage(error, stackTrace),
@@ -192,12 +100,120 @@ mixin AsyncOperationMixin<T, K extends StatefulWidget> on State<K> {
     );
   }
 
-  /// Called when data is successfully loaded. Override for custom handling.
+  /// Called when data is successfully loaded.
   void onSuccess(T data) {}
 
-  /// Called when the state transitions to loading. Override for custom handling.
+  /// Called when the state transitions to loading.
   void onLoading() {}
 
-  /// Called when the state transitions to idle. Override for custom handling.
+  /// Called when the state transitions to idle.
+  void onIdle() {}
+}
+
+/// Adds one asynchronous operation to a Flutter [State].
+///
+/// This adapter owns Flutter initialization, notification, rebuilding, and
+/// disposal. Use [AsyncOperationMixin] for non-widget hosts.
+mixin AsyncOperationStateMixin<T, K extends StatefulWidget> on State<K> {
+  /// Notifier that broadcasts the current operation state.
+  late final ValueNotifier<OperationState<T>> operationNotifier;
+
+  late final AsyncOperation<T> _operation;
+
+  /// The current operation state.
+  OperationState<T> get operation => _operation.state;
+
+  /// Whether to automatically load data when initialized.
+  bool get loadOnInit => true;
+
+  /// Whether the entire widget rebuilds on state changes.
+  bool get globalRefresh => false;
+
+  /// Initializes notification and optionally schedules loading.
+  @override
+  void initState() {
+    super.initState();
+    final initialState = loadOnInit
+        ? LoadingOperation<T>()
+        : IdleOperation<T>();
+    operationNotifier = ValueNotifier<OperationState<T>>(initialState);
+    _operation = AsyncOperation<T>(
+      initialState: initialState,
+      onChanged: (_, next) {
+        operationNotifier.value = next;
+        if (mounted && globalRefresh) setState(() {});
+      },
+      errorMessage: errorMessage,
+      onLoading: onLoading,
+      onSuccess: onSuccess,
+      onError: onError,
+      onIdle: onIdle,
+    );
+
+    if (loadOnInit) Future.microtask(load);
+  }
+
+  /// Rejects late completions and disposes the widget-owned notifier.
+  @override
+  void dispose() {
+    _operation.dispose();
+    operationNotifier.dispose();
+    super.dispose();
+  }
+
+  /// Fetches the data for this widget.
+  FutureOr<T> fetch();
+
+  /// Runs [fetch] with race protection and state transitions.
+  Future<void> load({bool cached = true}) =>
+      _operation.run(fetch, cached: cached);
+
+  /// Convenience method to reload data.
+  Future<void> reload({bool cached = true}) => load(cached: cached);
+
+  /// Updates the state to idle.
+  void setIdle({bool cached = true}) => _operation.setIdle(cached: cached);
+
+  /// Updates the state to loading.
+  void setLoading({bool cached = true}) =>
+      _operation.setLoading(cached: cached);
+
+  /// Updates the state to success.
+  void setSuccess(T data, {String? message}) =>
+      _operation.setSuccess(data, message: message);
+
+  /// Attaches a message to the success produced by the current [fetch].
+  @protected
+  void attachMessage(String message) => _operation.attachMessage(message);
+
+  /// Updates the state to error.
+  void setError(
+    Object error,
+    StackTrace stackTrace, {
+    String? message,
+    bool cached = true,
+  }) =>
+      _operation.setError(error, stackTrace, message: message, cached: cached);
+
+  /// Converts an error into a human-readable message.
+  String errorMessage(Object error, StackTrace stackTrace) => error.toString();
+
+  /// Called when an error occurs.
+  void onError(Object error, StackTrace stackTrace, {String? message}) {
+    developer.log(
+      message ?? errorMessage(error, stackTrace),
+      error: error,
+      stackTrace: stackTrace,
+      name: 'AsyncOperationStateMixin',
+    );
+  }
+
+  /// Called when data is successfully loaded.
+  void onSuccess(T data) {}
+
+  /// Called when the state transitions to loading.
+  void onLoading() {}
+
+  /// Called when the state transitions to idle.
   void onIdle() {}
 }

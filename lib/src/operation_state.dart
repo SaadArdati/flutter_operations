@@ -8,9 +8,10 @@ enum _CopySentinel { unset }
 ///
 /// Four runtime variants exist and can be matched exhaustively with Dart 3's
 /// sealed classes:
-/// * [IdleOperation]: Ready but not-loading state. This only
-///   appears when `loadOnInit / listenOnInit` is set to `false` or when
-///   `setIdle()` is called manually. It can still carry cached data.
+/// * [IdleOperation]: Ready but not-loading state. Engines and hosts start
+///   idle by default. Widgets start idle when `loadOnInit` or `listenOnInit`
+///   is false; setters and cancellation can also publish idle. It can
+///   still carry cached data.
 /// * [LoadingOperation]: Operation in progress (optionally with cached
 ///   data). `IdleOperation` extends this class so a single pattern can cover
 ///   both cases when the extra distinction is not important.
@@ -27,21 +28,21 @@ enum _CopySentinel { unset }
 /// switch (state) {
 ///   IdleOperation() => const Text('Ready'),
 ///   LoadingOperation(data: null) => const CircularProgressIndicator(),
-///   LoadingOperation(:var data?) => Stack(children: [
+///   LoadingOperation(:final data?) => Stack(children: [
 ///     DataView(data),
 ///     const LinearProgressIndicator(),
 ///   ]),
-///   SuccessOperation(:var data) => DataView(data),
-///   ErrorOperation(:var message, data: null) => ErrorBanner(message),
-///   ErrorOperation(:var message, :var data?) => Stack(children: [
+///   ErrorOperation(:final message, data: null) => ErrorBanner(message ?? 'Unable to load data'),
+///   ErrorOperation(:final message, :final data?) => Stack(children: [
 ///     DataView(data),
-///     ErrorBanner(message),
+///     ErrorBanner(message ?? 'Unable to load data'),
 ///   ]),
+///   SuccessOperation(:final data) => DataView(data),
 /// }
 /// ```
 sealed class OperationState<T> {
   /// Creates a state with an optional data parameter.
-  const OperationState({T? data}) : _data = data;
+  const OperationState({this._data});
 
   /// The data associated with the operation, if any.
   final T? _data;
@@ -118,6 +119,7 @@ base class LoadingOperation<T> extends OperationState<T> {
         data: identical(data, _CopySentinel.unset) ? this.data : data as T?,
       );
 
+  /// Compares fields by equality, without deep collection comparison.
   @override
   bool operator ==(Object other) {
     if (identical(this, other)) return true;
@@ -126,9 +128,11 @@ base class LoadingOperation<T> extends OperationState<T> {
         other.data == data;
   }
 
+  /// Hash of the fields used by equality.
   @override
   int get hashCode => Object.hash(runtimeType, data);
 
+  /// Diagnostic representation of this snapshot.
   @override
   String toString() => 'LoadingOperation(data: $data)';
 }
@@ -150,6 +154,7 @@ final class IdleOperation<T> extends LoadingOperation<T> {
         data: identical(data, _CopySentinel.unset) ? this.data : data as T?,
       );
 
+  /// Diagnostic representation of this snapshot.
   @override
   String toString() => 'IdleOperation(data: $data)';
 }
@@ -210,6 +215,7 @@ final class SuccessOperation<T> extends OperationState<T> {
         : message as String?,
   );
 
+  /// Compares fields by equality, without deep collection comparison.
   @override
   bool operator ==(Object other) {
     if (identical(this, other)) return true;
@@ -218,9 +224,11 @@ final class SuccessOperation<T> extends OperationState<T> {
         other.message == message;
   }
 
+  /// Hash of the fields used by equality.
   @override
   int get hashCode => Object.hash(_data, message);
 
+  /// Diagnostic representation of this snapshot.
   @override
   String toString() => 'SuccessOperation(data: $_data, message: $message)';
 }
@@ -268,6 +276,7 @@ final class ErrorOperation<T> extends OperationState<T> {
         : stackTrace as StackTrace?,
   );
 
+  /// Compares fields by equality, without deep collection comparison.
   @override
   bool operator ==(Object other) {
     if (identical(this, other)) return true;
@@ -278,9 +287,11 @@ final class ErrorOperation<T> extends OperationState<T> {
         other.data == data;
   }
 
+  /// Hash of the fields used by equality.
   @override
   int get hashCode => Object.hash(message, error, stackTrace, data);
 
+  /// Diagnostic representation of this snapshot.
   @override
   String toString() =>
       'ErrorOperation(message: $message, error: $error, '

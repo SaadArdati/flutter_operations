@@ -5,79 +5,140 @@
 
 <img src="screenshots/header.png" alt="flutter_operations: async UI with type-safe states" width="100%">
 
-Type-safe state for asynchronous work in Flutter.
+`flutter_operations` provides typed state and lifecycle management for asynchronous work in Flutter. It supports requests, commands, refreshes, and live subscriptions within your existing application architecture.
 
-`flutter_operations` models each operation as one of four sealed states: idle, loading, success, or error. Use the states directly with any architecture, or add a mixin to a widget for a complete Future or Stream lifecycle with cached data, race protection, callbacks, and automatic cleanup.
+Async interfaces need to represent loading, success, failure, and cached data. Their execution layer must also define how overlapping requests update state and how pending work behaves when its owner is disposed. Stream subscriptions require additional control over replacement, cancellation, and cleanup.
 
-```dart
-final Widget body = switch (operation) {
-  IdleOperation() => const Text('Ready'),
-  LoadingOperation(data: null) => const CircularProgressIndicator(),
-  LoadingOperation(:final data?) => DataView(data, refreshing: true),
-  SuccessOperation(:final data) => DataView(data),
-  ErrorOperation(:final message, data: null) => ErrorView(message),
-  ErrorOperation(:final message, :final data?) =>
-    DataView(data, error: message),
-};
-```
+`OperationState<T>` represents the UI state with a sealed type hierarchy. `AsyncOperation<T>` and `StreamOperation<T>` manage execution, reject stale results, and retain cached data when requested. Host and widget mixins connect those engines to the appropriate lifecycle.
 
-The compiler checks that every runtime state is handled. Loading and error states can retain the last successful value, so refreshes and temporary failures do not need to blank the screen.
+The package works with Bloc, Riverpod, Provider, Signals, MobX, or widget-owned state. It does not replace those architectures or add dependencies on them.
 
-This package grew from [Exhaustive Pattern Matching for Exhausted Flutter Developers](https://medium.com/@saadoardati/exhaustive-pattern-matching-for-exhausted-flutter-developers-cd6837459862).
-
-## Why use it?
-
-A Future or Stream is rarely only "loading" or "done." Real interfaces need to distinguish:
-
-- waiting for the user to start an action;
-- loading without data;
-- refreshing while old data remains visible;
-- success with a required, nullable, or intentionally absent result;
-- failure without data;
-- failure while cached data remains usable.
-
-Loose `isLoading`, `data`, and `error` fields can represent contradictory combinations. `OperationState<T>` cannot. Its sealed hierarchy gives each combination a name and lets Dart verify exhaustive switches.
-
-The package is useful at two levels:
-
-1. **Use `OperationState<T>` by itself.** It is a small immutable state model that works in Cubit, BLoC, Riverpod, Provider, ChangeNotifier, controllers, reducers, tests, or plain Dart classes.
-2. **Use a widget mixin.** `AsyncOperationMixin` and `StreamOperationMixin` own the lifecycle when an operation belongs to one `StatefulWidget` and a larger state-management layer would add ceremony without value.
-
-It is not a replacement for application architecture. It is a focused operation model that fits inside the architecture you already use.
+The original state model was introduced in [Exhaustive Pattern Matching for Exhausted Flutter Developers](https://medium.com/@saadoardati/exhaustive-pattern-matching-for-exhausted-flutter-developers-cd6837459862). Version 4 extends that model with reusable execution controllers and explicit ownership adapters.
 
 ## Install
 
+Requires Dart **3.12+** and a Flutter SDK that bundles it.
+
 ```yaml
 dependencies:
-  flutter_operations: ^3.0.0
+  flutter_operations: ^4.0.0
 ```
 
 ```dart
 import 'package:flutter_operations/flutter_operations.dart';
 ```
 
-### Install the agent skill
+## One request, one owner
 
-Install the optional skill for Claude Code, Codex, Cursor, Gemini CLI, and other supported agents:
+```dart
+final user = AsyncOperation<User>(
+  onChanged: (_, next) => publish(next),
+  errorMessage: (_, _) => 'Unable to load user',
+);
 
-```bash
-npx skills add SaadArdati/flutter_operations --skill flutter-operations
+await user.run(repository.fetchUser);
+
+// At the owner's lifecycle boundary:
+user.dispose();
 ```
 
-Add `-g` for a global installation.
+The operation owns loading, success, error, cached data, and generation tracking. By default, a newer run wins and older completions cannot replace it. Your state manager decides how to publish the snapshots. `publish`, `repository`, and `User` above belong to your app.
 
-For Claude Code, install the plugin in one step from inside a session:
+Render those snapshots exhaustively:
 
-```text
-/plugin install flutter-operations --marketplace SaadArdati/flutter_operations
+```dart
+// operation is OperationState<User>.
+final Widget body = switch (operation) {
+  IdleOperation(data: null) => const Text('Ready'),
+  LoadingOperation(data: null) => const CircularProgressIndicator(),
+  ErrorOperation(data: null, :final message) =>
+    ErrorView(message ?? 'Unable to load user'),
+  OperationState(:final data?) => ProfileView(data),
+};
 ```
 
-Or from your terminal:
+This deliberately shares content across success and cached states. Add separate branches when a refresh indicator or cached-error banner should accompany the content. Successful null and completion-only results need their own handling.
 
-```bash
-claude plugin marketplace add SaadArdati/flutter_operations
-claude plugin install flutter-operations@flutter-operations
+For repeated updates, use the matching stream engine:
+
+```dart
+final updates = StreamOperation<User>(
+  onChanged: (_, next) => publish(next),
+  errorMessage: (_, _) => 'Unable to update user',
+);
+
+await updates.listen(repository.watchUser);
+// At the owner's lifecycle boundary:
+await updates.dispose();
 ```
+
+A restart rejects stale events immediately and waits for previous subscription cleanup before creating its replacement. `listen()` completes when subscribed, not when the stream ends. Stream errors can recover with later data.
+
+## Choose how much you need
+
+| Your owner | Use |
+|---|---|
+| Execution is already managed elsewhere | `OperationState<T>` directly |
+| A controller, service, or store owns one or several operations | Compose `AsyncOperation<T>` or `StreamOperation<T>` |
+| An external host wants inherited operation methods | `AsyncOperationMixin<T>` or `StreamOperationMixin<T>` |
+| A widget owns the Future lifecycle | `AsyncOperationStateMixin<T, Widget>` |
+| A widget owns the subscription lifecycle | `StreamOperationStateMixin<T, Widget>` |
+
+Host mixins need explicit framework notification and disposal. Widget adapters provide startup, a notifier, and Flutter lifecycle cleanup. MobX can track operation reads and changes; Cubit can emit the snapshots. The core has no state-management package dependencies.
+
+Cubit already exposes a `stream` getter, so its stream integration uses composition or delegates to a separate host rather than mixing in the conflicting `stream()` method. You do not need every approach in one app.
+
+## Guides and runnable examples
+
+- [Documentation introduction](docs/src/content/docs/index.mdx): the problem, state model, and execution layers.
+- [Ownership guide](docs/src/content/docs/start/ownership.md): choose direct state, composition, or a mixin.
+- [Integration guides](docs/src/content/docs/integrations/overview.md): notification and lifecycle boundaries for each framework.
+- [Example catalog](docs/src/content/docs/guides/examples.md): runnable async and streaming comparisons.
+- [Migration to 4.0](docs/src/content/docs/guides/migration.md): renamed widget adapters and cleanup changes.
+
+Run the documentation site locally with Node 24.
+
+```sh
+cd docs
+npm ci
+npm run dev
+```
+
+The sections below cover common usage directly. Code snippets use application-specific repositories and views; runnable implementations live in [example/](example/).
+
+### Publish to Cloudflare Pages
+
+[The deployment workflow](.github/workflows/deploy-pages.yml) builds the docs and Flutter demo and publishes them together to one Pages project. It uses Node 24 for docs and Flutter 3.47.4 for the demo. The docs are served at `/` and the demo at `/demo/`.
+
+Use the **Direct Upload** Pages project `flutter-operations-docs`, with `main` as the production branch. Do not connect Cloudflare's Git integration; GitHub Actions handles builds and uploads. Add `flutter-operations.saad-ardati.dev` through the project's **Custom domains** settings and follow Cloudflare's DNS instructions.
+
+| Content | Production URL |
+|---|---|
+| Documentation | `https://flutter-operations.saad-ardati.dev/` |
+| Interactive demo | `https://flutter-operations.saad-ardati.dev/demo/` |
+
+The combined upload directory is `docs/dist`. The project's `https://flutter-operations-docs.pages.dev` hostname also serves both the docs and demo. The separate `flutter-operations-example` Pages project is no longer needed for this workflow; leave it in place until the combined deployment is verified.
+
+Add two repository secrets under GitHub **Settings → Secrets and variables → Actions**.
+
+- `CLOUDFLARE_API_TOKEN` must have **Account → Cloudflare Pages → Edit** permission scoped to your Cloudflare account.
+- `CLOUDFLARE_ACCOUNT_ID` must contain that account's ID.
+
+Pushes to `main` deploy production. Same-repository pull requests deploy previews; fork pull requests only build and check the sites because they cannot access deployment secrets. You can also run **Deploy Pages** manually from GitHub Actions. Deployment jobs require the projects and secrets to exist.
+
+To build and deploy manually, run these commands from the repository root after setting up the projects. Wrangler will prompt for Cloudflare authentication if needed.
+
+```sh
+(cd docs && npm ci && npm run check && DOCS_SITE=https://flutter-operations.saad-ardati.dev npm run build)
+(cd example && flutter pub get && flutter build web --release --base-href=/demo/)
+mkdir -p docs/dist/demo
+cp -R example/build/web/. docs/dist/demo/
+npx wrangler pages deploy docs/dist --project-name=flutter-operations-docs --branch=main
+```
+
+`DOCS_SITE` sets the production URL for canonical links and the sitemap. Leave `DOCS_BASE` unset because the docs are served at the domain root. Flutter's `--base-href=/demo/` makes its assets resolve inside the demo directory.
+
+The docs build supplies its own `404.html`. The demo uses Flutter's default hash routing, so `/demo/` serves its index without a catch-all rewrite. Neither a Worker nor custom redirect rules are needed.
 
 ## The four states
 
@@ -108,11 +169,11 @@ final state = const SuccessOperation<void>(data: null, message: 'Deleted');
 
 ## Use case 1: Own a Future inside a widget
 
-Use `AsyncOperationMixin` for a request, database read, computation, permission check, command, or any other one-shot operation tied to a widget lifecycle.
+Use `AsyncOperationStateMixin` for a request, database read, computation, permission check, command, or any other one-shot operation tied to a widget lifecycle.
 
 ```dart
 class _ProfilePageState extends State<ProfilePage>
-    with AsyncOperationMixin<User, ProfilePage> {
+    with AsyncOperationStateMixin<User, ProfilePage> {
   @override
   Future<User> fetch() => repository.fetchUser(widget.userId);
 
@@ -127,9 +188,7 @@ class _ProfilePageState extends State<ProfilePage>
           message: message ?? 'Could not load the profile',
           onRetry: reload,
         ),
-        LoadingOperation(:final data?) ||
-        ErrorOperation(:final data?) ||
-        SuccessOperation(:final data) => RefreshIndicator(
+        OperationState(:final data?) => RefreshIndicator(
           onRefresh: reload,
           child: ProfileView(user: data),
         ),
@@ -154,9 +213,12 @@ Search, confirmation, and permission flows often should not start immediately. R
 
 ```dart
 class _SearchPageState extends State<SearchPage>
-    with AsyncOperationMixin<List<Result>, SearchPage> {
+    with AsyncOperationStateMixin<List<Result>, SearchPage> {
   @override
   bool get loadOnInit => false;
+
+  @override
+  bool get globalRefresh => true; // This example reads operation in build.
 
   String query = '';
 
@@ -172,21 +234,21 @@ class _SearchPageState extends State<SearchPage>
   Widget build(BuildContext context) => switch (operation) {
     IdleOperation() => SearchPrompt(onSubmitted: search),
     LoadingOperation() => const CircularProgressIndicator(),
-    SuccessOperation(:final data) => SearchResults(data),
     ErrorOperation(:final message) => ErrorView(message: message),
+    SuccessOperation(:final data) => SearchResults(data),
   };
 }
 ```
 
-Call `setIdle()` whenever the operation should return to a ready state. `setIdle(cached: true)` keeps existing data; `setIdle(cached: false)` clears it.
+Use `setIdle()` to publish a ready snapshot without invalidating pending work. On external async hosts, use `cancel()` to invalidate pending results before returning to idle. `setIdle(cached: true)` keeps existing data; `setIdle(cached: false)` clears it.
 
 ## Use case 2: Own a Stream inside a widget
 
-Use `StreamOperationMixin` for database snapshots, WebSockets, connectivity, location, sensors, or any source that can emit more than once.
+Use `StreamOperationStateMixin` for database snapshots, WebSockets, connectivity, location, sensors, or any source that can emit more than once.
 
 ```dart
 class _ChatPageState extends State<ChatPage>
-    with StreamOperationMixin<List<Message>, ChatPage> {
+    with StreamOperationStateMixin<List<Message>, ChatPage> {
   @override
   Stream<List<Message>> stream() => chatRepository.watchRoom(widget.roomId);
 
@@ -199,89 +261,130 @@ class _ChatPageState extends State<ChatPage>
           const Center(child: CircularProgressIndicator()),
         ErrorOperation(:final message, data: null) =>
           ErrorView(message: message),
-        LoadingOperation(:final data?) ||
-        ErrorOperation(:final data?) ||
-        SuccessOperation(:final data) => MessagesList(data),
+        OperationState(:final data?) => MessagesList(data),
       },
     );
   }
 }
 ```
 
-`listenOnInit` defaults to `true`. Set it to `false` to begin idle and call `listen()` later. Calling `listen()` replaces the current subscription and starts a new generation, so late values and errors from an older generation cannot replace current state. The subscription is canceled during disposal.
+`listenOnInit` defaults to `true`. Set it to `false` to begin idle and call `listen()` later. Calling `listen()` replaces the current subscription and starts a new generation, so late values and errors from an older generation cannot replace current state. Restarts await prior cancellation; await `listen()` when cleanup completion matters. `cancel()` invalidates events and publishes idle immediately, then completes when cancellation finishes. `setIdle()` only publishes a snapshot and leaves the subscription active. Disposal invalidates immediately and forwards asynchronous cleanup errors to the owning zone.
 
-## Use case 3: Use the states with any state manager
+## Use case 3: Integrate with any state manager
 
-The sealed states do not depend on either mixin. They are useful anywhere an object exposes state.
-
-### Cubit or BLoC
+### Cubit with the host mixin
 
 ```dart
-class UserCubit extends Cubit<OperationState<User>> {
+class UserCubit extends Cubit<OperationState<User>>
+    with AsyncOperationMixin<User> {
   UserCubit(this.repository) : super(const IdleOperation());
-
   final UserRepository repository;
 
-  Future<void> load() async {
-    emit(state.transitionTo.loading());
-    try {
-      final user = await repository.fetchUser();
-      emit(state.transitionTo.success(data: user));
-    } catch (error, stackTrace) {
-      emit(state.transitionTo.error(
-        message: 'Could not load the user',
-        error: error,
-        stackTrace: stackTrace,
-      ));
-    }
+  @override
+  Future<User> fetch() => repository.fetchUser();
+
+  @override
+  void operationChanged(OperationState<User> previous, OperationState<User> next) {
+    emit(next);
+  }
+
+  @override
+  String errorMessage(Object error, StackTrace trace) => 'Unable to load user';
+
+  @override
+  Future<void> close() {
+    disposeOperation();
+    return super.close();
   }
 }
 ```
 
-### ChangeNotifier or a plain controller
+Use inherited `load`, `reload`, and `cancel`. `BlocBuilder` still consumes `OperationState<User>`; no manual generation counter or async disposal guard is needed for operation-owned execution.
+
+### Composition and standalone execution
 
 ```dart
-class UserController extends ValueNotifier<OperationState<User>> {
-  UserController(this.repository) : super(const IdleOperation());
+final user = AsyncOperation<User>(
+  onChanged: (previous, next) => publish(next),
+  errorMessage: (error, trace) => 'Unable to load user',
+);
 
-  final UserRepository repository;
-
-  Future<void> load() async {
-    value = value.transitionTo.loading();
-    try {
-      value = value.transitionTo.success(data: await repository.fetchUser());
-    } catch (error, stackTrace) {
-      value = value.transitionTo.error(
-        error: error,
-        stackTrace: stackTrace,
-      );
-    }
-  }
-}
+await user.run(repository.fetchUser);
+// At the owner's disposal boundary:
+user.dispose();
 ```
 
-The same state field can live in a Riverpod Notifier, Provider model, reducer, service, or custom controller. State propagation belongs to that architecture; `flutter_operations` supplies the operation semantics.
+Keep separate operations for independent requests. `latest` is the default concurrency policy; `first` ignores calls while running. `cancel()` invalidates pending results and becomes idle, but does not abort underlying I/O. `setIdle()` only changes state. `run` completes without returning the payload; inspect `state` for success or error.
+
+### Standalone stream execution
+
+```dart
+final updates = StreamOperation<User>(
+  onChanged: (previous, next) => publish(next),
+  errorMessage: (error, trace) => 'Unable to update user',
+);
+await updates.listen(repository.watchUser);
+await updates.cancel();
+await updates.dispose();
+```
+
+Restarts invalidate old callbacks immediately and await cancellation before creating the next source. `listen` completes when the subscription is established, not when its stream finishes. Stream errors allow later data recovery; completion retains the last snapshot and invokes `onDone`. Cleanup failures propagate and block replacements. Sources must cooperate with asynchronous cancellation: a blocked `async*` source may require its underlying awaited work to finish before cleanup completes.
+
+The widget stream adapter delegates to this engine. `listen` and `cancel` are awaitable; Flutter disposal invalidates immediately and forwards cleanup errors to the owning zone.
+
+### Shared operation contract
+
+`AsyncOperation<T>` and `StreamOperation<T>` extend `Operation<T>`, which provides state access, read/change hooks, cached transitions, error formatting, message attachment, generation tracking, and disposal bookkeeping. Their execution policies and cleanup contracts remain separate. The base does not introduce a generic cancellation or disposal method.
+
+### Hooks and callback ordering
+
+`state` reads invoke `onRead`. Unequal snapshots are assigned before `onChanged(previous, next)` and then the lifecycle callback. Equal snapshots suppress both callbacks, including repeated equal stream data. Call `super` in overrides to retain constructor callbacks. The flags `isRunning` and `isDisposed` do not invoke read hooks. Callbacks run synchronously and are not an isolated error boundary.
+
+`onError` receives the explicit setter message, which may be null even when the error snapshot has formatted text. Use the snapshot for resolved display text. Default engine formatting is diagnostic `error.toString()`; override it for user-facing messages.
+
+### Native framework publication
+
+| Framework | Composition callback / host hook |
+|---|---|
+| Cubit | `emit(next)` |
+| Riverpod Notifier | `state = next`; controller and disposal tied to each build lifetime |
+| Provider / ChangeNotifier | `notifyListeners()`; render controller state |
+| Signals | `signal.value = next`; dispose controller before signal |
+| MobX | Atom-backed `onRead` and `onChanged`; ordinary getters can remain reactive |
+
+MobX `Store` is a mixin, so a store can extend an operation subclass while mixing in `Store`. `@observable` on an operation field does not observe inner transitions, and `@computed` needs an already-reactive read. A reusable Atom bridge avoids copied observable state.
+
+The host mixin also exposes `operationController` for an overridden getter or constructor-injected engine. The supplied instance owns callback configuration and is disposed by `disposeOperation`; its unused lazy default is never constructed. Overriding only the visible state getter does not reroute commands.
+
+Direct `OperationState<T>` remains useful when execution is already managed elsewhere. Its transition helpers do not provide cancellation, generations, or disposal checks: manually managed async work must guard both successful and failed completions.
+
+### Runnable comparisons
+
+- [Standalone Future execution](example/lib/async/standalone_async_operation_example.dart) and [standalone stream execution](example/lib/stream/standalone_stream_operation_example.dart)
+- [Widget Future/search](example/lib/async/widget_operations_example.dart) and [widget stream](example/lib/stream/widget_stream_example.dart)
+- [Cubit: direct, composed, and mixin](example/lib/async/bloc_integration_example.dart)
+- [Riverpod](example/lib/async/riverpod_integration_example.dart), [Provider](example/lib/async/provider_integration_example.dart), and [Signals](example/lib/async/signals_integration_example.dart): three ownership approaches each
+- [MobX](example/lib/async/mobx_integration_example.dart): composition, read hooks, computed getters, inheritance, reusable mixins, and injection
+
+Stream comparisons also cover [Cubit](example/lib/stream/bloc_stream_integration_example.dart), [Riverpod](example/lib/stream/riverpod_stream_integration_example.dart), [Provider](example/lib/stream/provider_stream_integration_example.dart), [Signals](example/lib/stream/signals_stream_integration_example.dart), and [MobX](example/lib/stream/mobx_stream_integration_example.dart).
+
+These are alternatives, not layers every app needs. The core has no state-management package dependencies.
 
 ## Use case 4: Keep content visible during refresh and failure
 
 Cached data is a first-class part of loading and error states.
 
 ```dart
-Future<void> refresh() async {
-  state = state.transitionTo.loading(); // Existing data is preserved.
-  try {
-    state = state.transitionTo.success(data: await repository.fetchItems());
-  } catch (error, stackTrace) {
-    state = state.transitionTo.error(
-      message: 'Refresh failed',
-      error: error,
-      stackTrace: stackTrace,
-    ); // Existing data is still available.
-  }
-}
+final items = AsyncOperation<List<Item>>(
+  onChanged: (_, next) => publish(next),
+  errorMessage: (error, trace) => 'Refresh failed',
+);
+
+Future<void> refresh() => items.run(repository.fetchItems);
+// Dispose items at the owner lifecycle boundary.
 ```
 
-This supports stale-while-refresh interfaces without a separate cache field. Pass `data: null` when a transition must deliberately clear cached data:
+Execution retains the last data by default, including on failure. For manually managed state, `transitionTo` preserves it as well, but the host must supply stale-result and disposal guards. Pass `data: null` when a transition must deliberately clear cached data:
 
 ```dart
 state = state.transitionTo.loading(data: null);
@@ -293,9 +396,12 @@ Operations also describe work whose result is completion itself: save, delete, u
 
 ```dart
 class _SaveButtonState extends State<SaveButton>
-    with AsyncOperationMixin<void, SaveButton> {
+    with AsyncOperationStateMixin<void, SaveButton> {
   @override
   bool get loadOnInit => false;
+
+  @override
+  bool get globalRefresh => true; // Rebuild the button on transitions.
 
   @override
   Future<void> fetch() async {
@@ -399,10 +505,10 @@ return switch (operation) {
   IdleOperation(:final data?) => Preview(data),
   LoadingOperation(data: null) => const LoadingView(),
   LoadingOperation(:final data?) => DataView(data, refreshing: true),
-  SuccessOperation(:final data) => DataView(data),
   ErrorOperation(:final message, data: null) => ErrorView(message: message),
   ErrorOperation(:final message, :final data?) =>
     DataView(data, error: message),
+  SuccessOperation(:final data) => DataView(data),
 };
 ```
 
@@ -412,8 +518,8 @@ Use the base type when state identity does not affect rendering.
 
 ```dart
 return switch (operation) {
+  OperationState(data: null) => const LoadingView(),
   OperationState(:final data?) => DataView(data),
-  OperationState() => const LoadingView(),
 };
 ```
 
@@ -424,8 +530,8 @@ Put error first when it should override cached-data rendering.
 ```dart
 return switch (operation) {
   ErrorOperation(:final message) => ErrorView(message: message),
+  OperationState(data: null) => const LoadingView(),
   OperationState(:final data?) => DataView(data),
-  OperationState() => const LoadingView(),
 };
 ```
 
@@ -433,10 +539,10 @@ return switch (operation) {
 
 ```dart
 return switch (operation) {
-  SuccessOperation(:final data) when data.isEmpty => const EmptyView(),
-  SuccessOperation(:final data) => ResultsView(data),
   LoadingOperation() => const LoadingView(),
   ErrorOperation(:final message) => ErrorView(message: message),
+  SuccessOperation(:final data) when data.isEmpty => const EmptyView(),
+  SuccessOperation(:final data) => ResultsView(data),
 };
 ```
 
@@ -451,7 +557,13 @@ ElevatedButton(
 
 Available getters include `isLoading`, `isIdle`, `isSuccess`, `isError`, their `isNot...` counterparts, `hasData`, `hasNoData`, and `dataOrNull`.
 
-## Mixin reference
+## Host and widget mixins
+
+`AsyncOperationMixin<T>` is host-neutral: implement `fetch`, publish in `operationChanged`, and call `disposeOperation` at the owner boundary. `StreamOperationMixin<T>` similarly supplies `stream`, awaitable `listen`/`cancel`, and awaitable `disposeOperation`. It does not auto-start or expose a widget notifier. Its default operation reports reads through `operationRead`.
+
+The following table applies to **widget** adapters: `AsyncOperationStateMixin<T, Widget>` and `StreamOperationStateMixin<T, Widget>`.
+
+## Widget mixin reference
 
 | Purpose | Async mixin | Stream mixin |
 |---|---|---|
@@ -485,6 +597,34 @@ Use this package when one operation benefits from explicit lifecycle state and e
 - tests that need precise operation-state assertions.
 
 Use a larger state machine or orchestration layer when several operations must coordinate atomically, when offline synchronization is the main problem, or when the domain has many states that are not meaningfully idle/loading/success/error. You can still use `OperationState<T>` for individual operations inside that larger model.
+
+## Migrating from 3.x
+
+Rename widget uses of `AsyncOperationMixin<T, Widget>` to `AsyncOperationStateMixin<T, Widget>`. The single-argument `AsyncOperationMixin<T>` is now for external hosts. Likewise rename widget `StreamOperationMixin<T, Widget>` to `StreamOperationStateMixin<T, Widget>`; the single-argument stream mixin is host-neutral. Version 4 requires Dart 3.12 or newer; use a Flutter SDK that bundles it. The widget stream adapter now returns `Future<void>` from `listen` and exposes awaitable `cancel`. Await cleanup where possible; widget disposal routes asynchronous cleanup failures to the owning zone. Future widget notifications now precede lifecycle callbacks. Existing standalone state constructors/transitions remain supported. See the [migration guide](skills/flutter-operations/migration.md).
+
+## Agent support
+
+Install the optional skill for Claude Code, Codex, Cursor, Gemini CLI, and other supported agents:
+
+```bash
+npx skills add SaadArdati/flutter_operations --skill flutter-operations
+```
+
+Add `-g` for a global installation.
+
+For Claude Code, install the plugin in one step from inside a session:
+
+```text
+/plugin install flutter-operations --marketplace SaadArdati/flutter_operations
+```
+
+Or from your terminal:
+
+```bash
+claude plugin marketplace add SaadArdati/flutter_operations
+claude plugin install flutter-operations@flutter-operations
+```
+
 
 ## Contributing
 

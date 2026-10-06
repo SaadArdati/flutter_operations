@@ -3,222 +3,243 @@ import 'dart:developer' as developer;
 
 import 'package:flutter/widgets.dart';
 
-import 'message_zone.dart';
 import 'operation_state.dart';
+import 'stream_operation.dart';
 
-/// A mixin that adds stream-based state management to a [StatefulWidget].
+/// Adds one stream operation to an external host.
 ///
-/// Handles continuous data streams with automatic subscription management,
-/// state transitions, and proper cleanup. Unlike [AsyncOperationMixin] which
-/// deals with one-off operations, this mixin is built for sources that emit
-/// multiple values over time (e.g. WebSockets, database listeners).
+/// Hosts publish [operationChanged] and await [disposeOperation] at their
+/// lifecycle boundary. Supplied controllers own their configuration/callbacks.
+/// The [stream] method cannot coexist with a host's `stream` getter, such as
+/// Cubit/BlocBase. Compose [StreamOperation] or delegate to a separate host.
+mixin StreamOperationMixin<T> {
+  late final StreamOperation<T> _operation = StreamOperation<T>(
+    initialState: initialOperationState,
+    onRead: operationRead,
+    onChanged: operationChanged,
+    errorMessage: errorMessage,
+    onLoading: onLoading,
+    onData: onData,
+    onError: onError,
+    onIdle: onIdle,
+    onDone: onDone,
+  );
+
+  /// Return a stable controller within a host lifetime. Disposal owns it.
+  StreamOperation<T> get operationController => _operation;
+
+  /// Initial snapshot used by the lazily created default controller.
+  OperationState<T> get initialOperationState => IdleOperation<T>();
+
+  /// Current snapshot of the owned controller.
+  OperationState<T> get operation => operationController.state;
+
+  /// Creates a fresh source for each subscription attempt.
+  Stream<T> stream();
+
+  /// Restarts listening after cleanup; cancellation failures propagate.
+  Future<void> listen({bool cached = true}) =>
+      operationController.listen(stream, cached: cached);
+
+  /// Invalidates events, becomes idle, and awaits cleanup.
+  Future<void> cancel({bool cached = true}) =>
+      operationController.cancel(cached: cached);
+
+  /// Disables publication immediately and awaits owned subscription cleanup.
+  Future<void> disposeOperation() => operationController.dispose();
+
+  /// Attaches a message inside the active source zone, before `yield`.
+  /// Calls outside this controller's source flow are ignored.
+  @protected
+  void attachMessage(String message) =>
+      operationController.attachMessage(message);
+
+  /// Publishes idle without canceling; optionally clears cached data.
+  void setIdle({bool cached = true}) =>
+      operationController.setIdle(cached: cached);
+
+  /// Publishes loading without canceling; optionally clears cached data.
+  void setLoading({bool cached = true}) =>
+      operationController.setLoading(cached: cached);
+
+  /// Publishes success and an optional message without stopping the source.
+  void setData(T data, {String? message}) =>
+      operationController.setData(data, message: message);
+
+  /// Publishes an error without stopping the source; optionally clears cache.
+  void setError(
+    Object error,
+    StackTrace trace, {
+    String? message,
+    bool cached = true,
+  }) => operationController.setError(
+    error,
+    trace,
+    message: message,
+    cached: cached,
+  );
+
+  /// Tracks default-controller reads; does nothing by default.
+  void operationRead() {}
+
+  /// Publishes default-controller changes through the host notification mechanism.
+  /// Called after assignment, before lifecycle hooks, only for unequal snapshots.
+  void operationChanged(OperationState<T> previous, OperationState<T> next) {}
+
+  /// Formats display text; defaults to diagnostic `error.toString()`.
+  String errorMessage(Object error, StackTrace trace) => error.toString();
+
+  /// Called after an unequal loading snapshot is published.
+  void onLoading() {}
+
+  /// Called after an unequal success snapshot is published.
+  void onData(T data) {}
+
+  /// Called after an unequal error snapshot; logs diagnostics by default.
+  /// [message] may be null; the snapshot contains the resolved display text.
+  void onError(Object error, StackTrace trace, {String? message}) {
+    developer.log(
+      message ?? errorMessage(error, trace),
+      name: 'StreamOperationMixin',
+      error: error,
+      stackTrace: trace,
+    );
+  }
+
+  /// Called after an unequal idle snapshot is published.
+  void onIdle() {}
+
+  /// Called on natural completion, retaining the last snapshot.
+  void onDone() {}
+}
+
+/// Widget lifecycle adapter for [StreamOperation].
 ///
-/// Example:
-/// ```dart
-/// class _ChatState extends State<ChatPage>
-///     with StreamOperationMixin<List<Message>, ChatPage> {
-///   @override
-///   Stream<List<Message>> stream() => chatService.messagesStream();
-/// }
-/// ```
-mixin StreamOperationMixin<T, K extends StatefulWidget> on State<K> {
-  /// Notifier that broadcasts the current operation state.
+/// Owns startup, notification, rebuilding, and subscription disposal.
+mixin StreamOperationStateMixin<T, K extends StatefulWidget> on State<K> {
+  /// Notifies listeners of unequal snapshots; disposed with the widget.
   late final ValueNotifier<OperationState<T>> operationNotifier;
+  late final StreamOperation<T> _operation;
 
-  /// Generation counter to prevent race conditions in stream operations.
-  int _generation = 0;
+  /// Current snapshot of the owned controller.
+  OperationState<T> get operation => _operation.state;
 
-  /// The current operation state.
-  OperationState<T> get operation => operationNotifier.value;
-
-  /// Whether to automatically start listening when initialized.
-  /// Defaults to `true`.
+  /// Whether to schedule listening after initialization; defaults to true.
   bool get listenOnInit => true;
 
-  /// Whether the entire widget rebuilds on state changes.
-  /// Defaults to `false`.
+  /// Whether transitions rebuild the whole widget; defaults to false.
+  /// Otherwise observe [operationNotifier] with a `ValueListenableBuilder`.
   bool get globalRefresh => false;
 
-  /// The active stream subscription.
-  StreamSubscription? _streamSubscription;
-
+  /// Initializes notification and optionally schedules listening.
   @override
   void initState() {
     super.initState();
-    operationNotifier = ValueNotifier<OperationState<T>>(
-      listenOnInit ? LoadingOperation<T>() : IdleOperation<T>(),
+    final initialState = listenOnInit
+        ? LoadingOperation<T>()
+        : IdleOperation<T>();
+    operationNotifier = ValueNotifier<OperationState<T>>(initialState);
+    _operation = StreamOperation<T>(
+      initialState: initialState,
+      onChanged: (_, next) {
+        operationNotifier.value = next;
+        if (mounted && globalRefresh) setState(() {});
+      },
+      errorMessage: errorMessage,
+      onLoading: onLoading,
+      onData: onData,
+      onError: onError,
+      onIdle: onIdle,
+      onDone: onDone,
     );
-
-    if (listenOnInit) {
-      Future.microtask(listen);
-    }
+    if (listenOnInit) Future.microtask(listen);
   }
 
+  // Flutter disposal cannot await. Forward cleanup failures to the owning zone
+  // rather than silently dropping asynchronous subscription errors.
+  void _disposeSubscription() {
+    final zone = Zone.current;
+    _operation.dispose().then<void>(
+      (_) {},
+      onError: (Object error, StackTrace trace) =>
+          zone.handleUncaughtError(error, trace),
+    );
+  }
+
+  /// Invalidates events and disposes notification, then starts source cleanup.
+  /// Asynchronous cleanup errors are forwarded to the owning zone.
   @override
   void dispose() {
+    _disposeSubscription();
     operationNotifier.dispose();
-    _streamSubscription?.cancel();
     super.dispose();
   }
 
-  /// Creates and returns the stream to listen to.
-  ///
-  /// Override this method to provide the data stream for this operation.
+  /// Creates a fresh source for each subscription attempt.
   Stream<T> stream();
 
-  /// Starts listening to the stream and manages subscription lifecycle.
-  ///
-  /// Initiates cancellation of the current subscription, then creates its
-  /// replacement. Late events from an older subscription are ignored.
-  ///
-  /// Wraps the [stream] subscription in a [Zone] holding a per-call
-  /// [MessageCell]. Any [attachMessage] calls made inside [stream]
-  /// (typically inside an `async*` body before each `yield`) write to that
-  /// cell; the message is then paired with the value on the resulting
-  /// [SuccessOperation].
-  void listen({bool cached = true}) {
-    final currentGeneration = ++_generation;
-    setLoading(cached: cached);
-    _streamSubscription?.cancel();
+  /// Completes when the replacement subscription is established.
+  Future<void> listen({bool cached = true}) =>
+      _operation.listen(stream, cached: cached);
 
-    final cell = MessageCell();
-    try {
-      runZoned(() {
-        _streamSubscription = stream().listen(
-          (value) {
-            if (!mounted || _generation != currentGeneration) return;
-            final msg = cell.value;
-            cell.value = null;
-            setData(value, message: msg);
-          },
-          onError: (error, stackTrace) {
-            if (!mounted || _generation != currentGeneration) return;
-            setError(
-              error,
-              stackTrace,
-              message: errorMessage(error, stackTrace),
-              cached: cached,
-            );
-          },
-          onDone: onDone,
-        );
-      }, zoneValues: {messageKey: cell});
-    } catch (error, stackTrace) {
-      if (!mounted || _generation != currentGeneration) return;
-      setError(
-        error,
-        stackTrace,
-        message: errorMessage(error, stackTrace),
-        cached: cached,
-      );
-    }
-  }
+  /// Invalidates events immediately and awaits subscription cleanup.
+  Future<void> cancel({bool cached = true}) =>
+      _operation.cancel(cached: cached);
 
-  /// Attaches an optional message to the next [setData] emission produced
-  /// by the current [stream] subscription. Safe to call inside `async*`
-  /// bodies before each `yield`. Outside a [listen] call this is a no-op.
+  /// Attaches a message inside the active source zone, before `yield`.
+  /// Calls outside this controller's source flow are ignored.
   @protected
-  void attachMessage(String message) {
-    final cell = Zone.current[messageKey];
-    if (cell case MessageCell cell?) cell.value = message;
-  }
+  void attachMessage(String message) => _operation.attachMessage(message);
 
-  /// Updates the state to idle.
-  ///
-  /// Preserves current data when [cached] is `true`, invokes [onIdle], and
-  /// rebuilds the widget when [globalRefresh] is enabled.
-  void setIdle({bool cached = true}) {
-    final lastData = cached ? operationNotifier.value.data : null;
-    final newOp = IdleOperation<T>(data: lastData);
-    if (newOp == operationNotifier.value) {
-      return;
-    }
+  /// Publishes idle without canceling; optionally clears cached data.
+  void setIdle({bool cached = true}) => _operation.setIdle(cached: cached);
 
-    operationNotifier.value = newOp;
-    onIdle();
-
-    if (mounted && globalRefresh) setState(() {});
-  }
-
-  /// Updates the state to loading, or idle if [idle] is `true`.
+  /// Publishes loading, or idle when [idle] is true, without canceling.
+  /// Retains cached data unless [cached] is false.
   void setLoading({bool idle = false, bool cached = true}) {
-    final lastData = cached ? operationNotifier.value.data : null;
-    final newOp = idle
-        ? IdleOperation<T>(data: lastData)
-        : LoadingOperation<T>(data: lastData);
-    if (newOp == operationNotifier.value) {
-      return;
+    if (idle) {
+      _operation.setIdle(cached: cached);
+    } else {
+      _operation.setLoading(cached: cached);
     }
-
-    operationNotifier.value = newOp;
-    idle ? onIdle() : onLoading();
-
-    if (mounted && globalRefresh) setState(() {});
   }
 
-  /// Updates the state to success with the provided data.
-  void setData(T data, {String? message}) {
-    if (operationNotifier.value case SuccessOperation(
-      data: final oldData,
-      message: final oldMessage,
-    ) when oldData == data && oldMessage == message) {
-      return;
-    }
+  /// Publishes success and an optional message without stopping the source.
+  void setData(T data, {String? message}) =>
+      _operation.setData(data, message: message);
 
-    operationNotifier.value = SuccessOperation<T>(data: data, message: message);
-    onData(data);
-
-    if (mounted && globalRefresh) setState(() {});
-  }
-
-  /// Updates the state to error with the provided error details.
+  /// Publishes an error without stopping the source; optionally clears cache.
   void setError(
     Object error,
     StackTrace stackTrace, {
     String? message,
     bool cached = true,
-  }) {
-    final lastData = cached ? operationNotifier.value.data : null;
-    final errorOp = ErrorOperation<T>(
-      message: message ?? errorMessage(error, stackTrace),
-      error: error,
-      stackTrace: stackTrace,
-      data: lastData,
-    );
+  }) =>
+      _operation.setError(error, stackTrace, message: message, cached: cached);
 
-    if (errorOp == operationNotifier.value) {
-      return;
-    }
-
-    operationNotifier.value = errorOp;
-    onError(error, stackTrace, message: message);
-
-    if (mounted && globalRefresh) setState(() {});
-  }
-
-  /// Converts an error and stack trace into a human-readable error message.
-  /// Override to provide custom error message formatting.
+  /// Formats display text; defaults to diagnostic `error.toString()`.
   String errorMessage(Object error, StackTrace stackTrace) => error.toString();
 
-  /// Called when an error occurs. Override for custom error handling.
+  /// Called after an unequal error snapshot; logs diagnostics by default.
+  /// [message] may be null; the snapshot contains the resolved display text.
   void onError(Object error, StackTrace stackTrace, {String? message}) {
     developer.log(
       message ?? errorMessage(error, stackTrace),
-      name: 'StreamOperationMixin',
+      name: 'StreamOperationStateMixin',
       error: error,
       stackTrace: stackTrace,
     );
   }
 
-  /// Called when the state transitions to loading.
+  /// Called after an unequal loading snapshot is published.
   void onLoading() {}
 
-  /// Called when the stream emits a new value.
+  /// Called after an unequal success snapshot is published.
   void onData(T value) {}
 
-  /// Called when the state transitions to idle.
+  /// Called after an unequal idle snapshot is published.
   void onIdle() {}
 
-  /// Called when the stream completes.
+  /// Called on natural completion, retaining the last snapshot.
   void onDone() {}
 }

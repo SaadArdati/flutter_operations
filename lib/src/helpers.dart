@@ -5,26 +5,31 @@ part of 'operation_state.dart';
 /// Concrete variants expose only other destinations. Use `copyWith` to update
 /// a known variant. Selection follows the receiver's static, promoted type.
 extension OperationTransitions<T> on OperationState<T> {
+  /// Available destinations for this statically typed state.
   AllTransitions<T> get transitionTo => AllTransitions<T>._(this);
 }
 
 /// Transitions from loading to idle, success, or error.
 extension LoadingTransitions<T> on LoadingOperation<T> {
+  /// Available destinations for this statically typed state.
   FromLoading<T> get transitionTo => FromLoading<T>._(this);
 }
 
 /// Transitions from idle to loading, success, or error.
 extension IdleTransitions<T> on IdleOperation<T> {
+  /// Available destinations for this statically typed state.
   FromIdle<T> get transitionTo => FromIdle<T>._(this);
 }
 
 /// Transitions from success to loading, idle, or error.
 extension SuccessTransitions<T> on SuccessOperation<T> {
+  /// Available destinations for this statically typed state.
   FromSuccess<T> get transitionTo => FromSuccess<T>._(this);
 }
 
 /// Transitions from error to loading, idle, or success.
 extension ErrorTransitions<T> on ErrorOperation<T> {
+  /// Available destinations for this statically typed state.
   FromError<T> get transitionTo => FromError<T>._(this);
 }
 

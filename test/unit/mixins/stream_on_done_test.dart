@@ -4,9 +4,8 @@ library;
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_test/flutter_test.dart';
-
 import 'package:flutter_operations/flutter_operations.dart' as ops;
+import 'package:flutter_test/flutter_test.dart';
 
 class _DoneStreamWidget extends StatefulWidget {
   const _DoneStreamWidget({required this.controller});
@@ -18,7 +17,7 @@ class _DoneStreamWidget extends StatefulWidget {
 }
 
 class _DoneStreamWidgetState extends State<_DoneStreamWidget>
-    with ops.StreamOperationMixin<int, _DoneStreamWidget> {
+    with ops.StreamOperationStateMixin<int, _DoneStreamWidget> {
   bool doneCalled = false;
 
   @override

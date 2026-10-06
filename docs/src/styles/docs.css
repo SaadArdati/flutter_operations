@@ -1,0 +1,42 @@
+/* A field guide, not a marketing landing page. Starlight supplies accessible
+   navigation, search, theme controls, code copying, and responsive layouts. */
+:root {
+  --sl-font: 'Avenir Next', 'Segoe UI', sans-serif;
+  --sl-color-accent-low: #153c35;
+  --sl-color-accent: #62bca5;
+  --sl-color-accent-high: #b8e8d9;
+  --sl-color-white: #f3f3ec;
+  --sl-color-gray-1: #e0e5de;
+  --sl-color-gray-2: #bac6bd;
+  --sl-color-gray-3: #81938a;
+  --sl-color-gray-4: #4b5d55;
+  --sl-color-gray-5: #202923;
+  --sl-color-gray-6: #111813;
+  --sl-color-black: #090e0b;
+  --sl-content-width: 49rem;
+  --sl-text-h1: clamp(2.1rem, 5vw, 3.25rem);
+}
+:root[data-theme='light'] {
+  --sl-color-accent-low: #e2f2ea;
+  --sl-color-accent: #23755c;
+  --sl-color-accent-high: #134c3b;
+  --sl-color-white: #192b23;
+  --sl-color-gray-1: #2c4036;
+  --sl-color-gray-2: #465b50;
+  --sl-color-gray-3: #63776d;
+  --sl-color-gray-4: #9aaba0;
+  --sl-color-gray-5: #d3ded5;
+  --sl-color-gray-6: #edf2eb;
+  --sl-color-gray-7: #f3f6ef;
+  --sl-color-black: #fafbf5;
+}
+body { background: var(--sl-color-bg); }
+.site-title { font-weight: 650; letter-spacing: -0.045em; }
+h1, h2, h3 { letter-spacing: -0.03em; }
+.sl-markdown-content { line-height: 1.8; }
+.sl-markdown-content h2 { margin-top: 2.5rem; }
+.sl-markdown-content table { font-size: 0.92rem; }
+.sl-markdown-content pre { line-height: 1.65; }
+.sl-markdown-content a { text-underline-offset: 0.2em; }
+:focus-visible { outline: 2px solid var(--sl-color-accent); outline-offset: 4px; }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; } }

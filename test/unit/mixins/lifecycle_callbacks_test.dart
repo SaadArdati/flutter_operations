@@ -17,7 +17,7 @@ class _CallbackAsyncWidget extends StatefulWidget {
 }
 
 class _CallbackAsyncWidgetState extends State<_CallbackAsyncWidget>
-    with ops.AsyncOperationMixin<TestData, _CallbackAsyncWidget> {
+    with ops.AsyncOperationStateMixin<TestData, _CallbackAsyncWidget> {
   int loadingCalls = 0;
   int successCalls = 0;
   int errorCalls = 0;

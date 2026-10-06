@@ -17,7 +17,7 @@ class _DisposalWidget extends StatefulWidget {
 }
 
 class _DisposalWidgetState extends State<_DisposalWidget>
-    with ops.AsyncOperationMixin<TestData, _DisposalWidget> {
+    with ops.AsyncOperationStateMixin<TestData, _DisposalWidget> {
   int successCalls = 0;
   int errorCalls = 0;
   int loadingCalls = 0;

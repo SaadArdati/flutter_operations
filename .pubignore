@@ -4,6 +4,10 @@
 # automatically by pub and do not need to be listed.
 build/
 coverage/
+doc/
+
+# Keep internal experiments in Git, not in the published package.
+test/scratch/
 
 # Internal design artifacts and AI skill files: not part of the published
 # package. Tests stay (community convention).

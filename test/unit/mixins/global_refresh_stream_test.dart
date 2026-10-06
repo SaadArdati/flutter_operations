@@ -4,8 +4,8 @@ library;
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_operations/flutter_operations.dart' as ops;
+import 'package:flutter_test/flutter_test.dart';
 
 class _GlobalRefreshStreamWidget extends StatefulWidget {
   const _GlobalRefreshStreamWidget({super.key});
@@ -16,7 +16,7 @@ class _GlobalRefreshStreamWidget extends StatefulWidget {
 }
 
 class _GlobalRefreshStreamWidgetState extends State<_GlobalRefreshStreamWidget>
-    with ops.StreamOperationMixin<int, _GlobalRefreshStreamWidget> {
+    with ops.StreamOperationStateMixin<int, _GlobalRefreshStreamWidget> {
   int buildCount = 0;
   final _controller = StreamController<int>();
 

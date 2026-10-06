@@ -1,5 +1,38 @@
 # flutter_operations patterns
 
+## Payload pattern spelling
+
+Choose the pattern that states the intent; do not use `Object()` as a non-null payload marker.
+
+| Intent | Pattern |
+|---|---|
+| Bind data, retaining its declared nullability | `SuccessOperation(:final data)` |
+| Require non-null data and use it | `OperationState(:final data?)` |
+| Require non-null data without using it | `OperationState(data: _?)` |
+| Match missing data | `LoadingOperation(data: null)` |
+| Ignore data entirely | `SuccessOperation()` |
+
+`final data` and `_` both accept null; neither replaces a non-null check. Prefer omitting an ignored property to `data: _`. `Object()` is a valid object pattern, not an allocation, but obscures a simple null check.
+
+For a non-nullable payload, initial loading and uncached errors can precede a shared content branch:
+
+```dart
+// state is OperationState<List<Entity>>.
+return switch (state) {
+  LoadingOperation(data: null) => const LoadingView(),
+  ErrorOperation(data: null, :final message) => ErrorView(message),
+  OperationState(:final data?) => EntityList(data),
+};
+```
+
+If content intentionally comes from another observable collection, use `OperationState(data: _?)` for that last arm instead. Do not bind a variable that the branch never uses.
+
+This three-arm shape assumes non-nullable success data. For `T?` or `void`, include an explicit `SuccessOperation` arm for successful null/completion; non-null data is not the definition of success. Keep switches exhaustive and handle idle separately when it differs from loading.
+
+## Branch order
+
+Prefer success/data UI, including empty-data success, as the final branch or success group when semantically safe. Put loading/error/idle-specific branches first. This is a style preference, not an anti-pattern prohibition. Preserve top-to-bottom matching: error-first may intentionally override cached content, and idle precedes loading when distinct. Do not move a catch-all before a data branch.
+
 ## Full exhaustive rendering
 
 Use separate arms when initial loading, refresh, terminal failure, and failure with cached content render differently.
@@ -10,10 +43,10 @@ return switch (state) {
   IdleOperation(:final data?) => Preview(data),
   LoadingOperation(data: null) => const LoadingView(),
   LoadingOperation(:final data?) => DataView(data, refreshing: true),
-  SuccessOperation(:final data) => DataView(data),
   ErrorOperation(:final message, data: null) => ErrorView(message),
   ErrorOperation(:final message, :final data?) =>
     DataView(data, error: message),
+  SuccessOperation(:final data) => DataView(data),
 };
 ```
 
@@ -27,8 +60,8 @@ When idle and loading render identically, omit the idle arm:
 return switch (state) {
   LoadingOperation(data: null) => const LoadingView(),
   LoadingOperation(:final data?) => DataView(data, refreshing: true),
-  SuccessOperation(:final data) => DataView(data),
   ErrorOperation(:final message) => ErrorView(message),
+  SuccessOperation(:final data) => DataView(data),
 };
 ```
 
@@ -40,25 +73,12 @@ When the UI only cares whether data exists:
 
 ```dart
 return switch (state) {
+  OperationState(data: null) => const LoadingView(),
   OperationState(:final data?) => DataView(data),
-  OperationState() => const LoadingView(),
 };
 ```
 
 This intentionally discards state-specific overlays.
-
-## Shared renderer for data-bearing variants
-
-```dart
-return switch (state) {
-  LoadingOperation(:final data?) ||
-  SuccessOperation(:final data) ||
-  ErrorOperation(:final data?) => DataView(data),
-  OperationState() => const LoadingView(),
-};
-```
-
-Use this when cached loading, success, and cached error share the same primary content.
 
 ## Error-first rendering
 
@@ -67,8 +87,8 @@ When any error should override cached content:
 ```dart
 return switch (state) {
   ErrorOperation(:final message) => ErrorView(message),
+  OperationState(data: null) => const LoadingView(),
   OperationState(:final data?) => DataView(data),
-  OperationState() => const LoadingView(),
 };
 ```
 
@@ -78,10 +98,10 @@ Dart matches top to bottom, so error remains authoritative even when it carries 
 
 ```dart
 return switch (state) {
-  SuccessOperation(:final data) when data.isEmpty => const EmptyView(),
-  SuccessOperation(:final data) => ResultsView(data),
   LoadingOperation() => const LoadingView(),
   ErrorOperation(:final message) => ErrorView(message),
+  SuccessOperation(:final data) when data.isEmpty => const EmptyView(),
+  SuccessOperation(:final data) => ResultsView(data),
 };
 ```
 
@@ -142,19 +162,19 @@ Success never inherits cache implicitly because it requires a new `data: T` resu
 
 ## Manual construction
 
-Prefer transitions when a current state exists. When constructing directly, propagate cache yourself:
+Use constructors when there is no prior state to transition from. Let the declared type supply constructor arguments:
 
 ```dart
-state = LoadingOperation(data: state.dataOrNull);
-state = ErrorOperation(
-  message: 'Refresh failed',
-  error: error,
-  stackTrace: stackTrace,
-  data: state.dataOrNull,
-);
+OperationState<User> state = const IdleOperation();
+OperationState<User?> lookup = const SuccessOperation(data: null);
+OperationState<void> command = const SuccessOperation(data: null);
 ```
 
-Use `error:`, not the removed `exception:` parameter.
+For an existing state, use the transitions above instead of copying `dataOrNull` into a new constructor. If the same concrete variant is already known, use `copyWith`.
+
+## User-facing errors
+
+Pass resolved localized text as `message`, and preserve diagnostics in `error` and `stackTrace`. These examples use direct user-facing text because no localization system is assumed. Do not pass exception strings or untranslated keys. For mixins, override `errorMessage`; the default diagnostic string is not suitable for display. Since `ErrorOperation.message` is nullable, render a localized fallback when absent.
 
 ## Success messages
 

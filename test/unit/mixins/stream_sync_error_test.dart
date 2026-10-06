@@ -2,9 +2,8 @@
 library;
 
 import 'package:flutter/material.dart';
-import 'package:flutter_test/flutter_test.dart';
-
 import 'package:flutter_operations/flutter_operations.dart' as ops;
+import 'package:flutter_test/flutter_test.dart';
 
 class _SyncErrorStreamWidget extends StatefulWidget {
   const _SyncErrorStreamWidget();
@@ -14,7 +13,7 @@ class _SyncErrorStreamWidget extends StatefulWidget {
 }
 
 class _SyncErrorStreamWidgetState extends State<_SyncErrorStreamWidget>
-    with ops.StreamOperationMixin<int, _SyncErrorStreamWidget> {
+    with ops.StreamOperationStateMixin<int, _SyncErrorStreamWidget> {
   @override
   bool get listenOnInit => true;
 

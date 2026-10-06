@@ -19,7 +19,7 @@ class _TestStreamWidget extends StatefulWidget {
 }
 
 class _TestStreamWidgetState extends State<_TestStreamWidget>
-    with ops.StreamOperationMixin<StreamTestData, _TestStreamWidget> {
+    with ops.StreamOperationStateMixin<StreamTestData, _TestStreamWidget> {
   @override
   bool get listenOnInit => false;
 

@@ -24,7 +24,7 @@ class TestAsyncWidget extends StatefulWidget {
 }
 
 class _TestAsyncWidgetState extends State<TestAsyncWidget>
-    with AsyncOperationMixin<TestData, TestAsyncWidget> {
+    with AsyncOperationStateMixin<TestData, TestAsyncWidget> {
   @override
   bool get loadOnInit => widget.loadOnInitOverride ?? super.loadOnInit;
 

@@ -2,9 +2,8 @@
 library;
 
 import 'package:flutter/material.dart';
-import 'package:flutter_test/flutter_test.dart';
-
 import 'package:flutter_operations/flutter_operations.dart' as ops;
+import 'package:flutter_test/flutter_test.dart';
 
 class _GlobalRefreshWidget extends StatefulWidget {
   const _GlobalRefreshWidget({super.key});
@@ -14,7 +13,7 @@ class _GlobalRefreshWidget extends StatefulWidget {
 }
 
 class _GlobalRefreshWidgetState extends State<_GlobalRefreshWidget>
-    with ops.AsyncOperationMixin<String, _GlobalRefreshWidget> {
+    with ops.AsyncOperationStateMixin<String, _GlobalRefreshWidget> {
   int buildCount = 0;
 
   @override

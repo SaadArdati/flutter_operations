@@ -170,7 +170,7 @@ class MockAsyncWidget extends StatefulWidget {
 }
 
 class _MockAsyncWidgetState extends State<MockAsyncWidget>
-    with AsyncOperationMixin<TestData, MockAsyncWidget> {
+    with AsyncOperationStateMixin<TestData, MockAsyncWidget> {
   @override
   bool get loadOnInit => widget.mockLoadOnInit ?? super.loadOnInit;
 
@@ -318,7 +318,7 @@ class MockStreamWidget extends StatefulWidget {
 }
 
 class _MockStreamWidgetState extends State<MockStreamWidget>
-    with StreamOperationMixin<StreamTestData, MockStreamWidget> {
+    with StreamOperationStateMixin<StreamTestData, MockStreamWidget> {
   @override
   bool get listenOnInit => widget.mockListenOnInit ?? false;
 

@@ -4,8 +4,8 @@ library;
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_operations/flutter_operations.dart' as ops;
+import 'package:flutter_test/flutter_test.dart';
 
 import '../../helpers/test_helpers.dart';
 
@@ -19,7 +19,7 @@ class _DefaultListenWidget extends StatefulWidget {
 }
 
 class _DefaultListenWidgetState extends State<_DefaultListenWidget>
-    with ops.StreamOperationMixin<StreamTestData, _DefaultListenWidget> {
+    with ops.StreamOperationStateMixin<StreamTestData, _DefaultListenWidget> {
   int loadingCalls = 0;
   int dataCalls = 0;
 
@@ -50,7 +50,7 @@ class _SetLoadingWidget extends StatefulWidget {
 }
 
 class _SetLoadingWidgetState extends State<_SetLoadingWidget>
-    with ops.StreamOperationMixin<int, _SetLoadingWidget> {
+    with ops.StreamOperationStateMixin<int, _SetLoadingWidget> {
   int loadingCalls = 0;
 
   @override

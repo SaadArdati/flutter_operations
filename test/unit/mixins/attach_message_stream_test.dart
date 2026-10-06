@@ -17,7 +17,7 @@ class _StreamWidget extends StatefulWidget {
 }
 
 class _StreamWidgetState extends State<_StreamWidget>
-    with StreamOperationMixin<int, _StreamWidget> {
+    with StreamOperationStateMixin<int, _StreamWidget> {
   final List<(int, String?)> emissions = <(int, String?)>[];
 
   /// Test-only hook (public) that invokes the @protected attachMessage from
@@ -174,6 +174,9 @@ void main() {
         // Mid-flight re-listen: cancels the first subscription, opens the
         // second. The first controller's stream subscription is gone.
         state.listen();
+        // async* cancellation waits for its pending await-for source to finish.
+        // Release that source before expecting the replacement subscription.
+        first.close();
         await tester.pump();
         await tester.pump();
 

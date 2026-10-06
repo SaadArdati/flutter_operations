@@ -5,3 +5,7 @@ build/
 pubspec.lock
 .flutter-plugins-dependencies
 coverage/
+
+# Local agent checkouts and generated Dart API documentation.
+.claude/worktrees/
+doc/api/
