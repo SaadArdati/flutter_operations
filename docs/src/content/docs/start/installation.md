@@ -52,16 +52,3 @@ Future<void> main() async {
 
 `run` returns `Future<void>`, not the payload. Ordinary work errors become error state. In an app, dispose at the owner's lifetime boundary, not after every reusable run. See [Choose an owner](../ownership/).
 
-## Run this documentation locally
-
-Run the following commands from the repository root.
-
-```sh
-cd docs
-npm ci
-npm run dev
-```
-
-Astro 7 requires a compatible modern Node release; Node 24.15 LTS was used to build this site. Check the installed Astro engine requirement when selecting an older Node release. `npm run build` emits `docs/dist`. `npm run preview` serves the build. `npm run check` validates internal page links and required coverage. Search uses Pagefind, indexed during production build; use preview to verify search.
-
-For a subpath host, build with `DOCS_BASE=/flutter_operations npm run build`. Set `DOCS_SITE=https://your-docs-domain.example` when a real host is chosen so canonical URLs and the sitemap can be generated. A missing-site sitemap warning is expected for the local-only default. Upload `dist` contents to a static host later. No hosting provider or public domain is assumed. These commands do not deploy anything.
