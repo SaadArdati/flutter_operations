@@ -67,6 +67,6 @@ jobs:
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           command: >-
             pages deploy docs/dist
-            --project-name=flutter-operations-docs
+            --project-name=flutter-operations
             --branch=${{ github.head_ref || github.ref_name }}
             --commit-hash=${{ github.sha }}

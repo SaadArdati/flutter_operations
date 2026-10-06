@@ -3,7 +3,7 @@
 [![Pub Version](https://img.shields.io/pub/v/flutter_operations.svg)](https://pub.dev/packages/flutter_operations)
 [![License: BSD-3-Clause](https://img.shields.io/badge/License-BSD--3--Clause-blue.svg)](https://opensource.org/license/bsd-3-clause)
 
-<img src="screenshots/header.png" alt="flutter_operations: async UI with type-safe states" width="100%">
+<img src="https://raw.githubusercontent.com/SaadArdati/flutter_operations/main/screenshots/header.png" alt="flutter_operations: async UI with type-safe states" width="100%">
 
 `flutter_operations` provides typed state and lifecycle management for asynchronous work in Flutter. It supports requests, commands, refreshes, and live subscriptions within your existing application architecture.
 
@@ -87,58 +87,6 @@ A restart rejects stale events immediately and waits for previous subscription c
 Host mixins need explicit framework notification and disposal. Widget adapters provide startup, a notifier, and Flutter lifecycle cleanup. MobX can track operation reads and changes; Cubit can emit the snapshots. The core has no state-management package dependencies.
 
 Cubit already exposes a `stream` getter, so its stream integration uses composition or delegates to a separate host rather than mixing in the conflicting `stream()` method. You do not need every approach in one app.
-
-## Guides and runnable examples
-
-- [Documentation introduction](docs/src/content/docs/index.mdx): the problem, state model, and execution layers.
-- [Ownership guide](docs/src/content/docs/start/ownership.md): choose direct state, composition, or a mixin.
-- [Integration guides](docs/src/content/docs/integrations/overview.md): notification and lifecycle boundaries for each framework.
-- [Example catalog](docs/src/content/docs/guides/examples.md): runnable async and streaming comparisons.
-- [Migration to 4.0](docs/src/content/docs/guides/migration.md): renamed widget adapters and cleanup changes.
-
-Run the documentation site locally with Node 24.
-
-```sh
-cd docs
-npm ci
-npm run dev
-```
-
-The sections below cover common usage directly. Code snippets use application-specific repositories and views; runnable implementations live in [example/](example/).
-
-### Publish to Cloudflare Pages
-
-[The deployment workflow](.github/workflows/deploy-pages.yml) builds the docs and Flutter demo and publishes them together to one Pages project. It uses Node 24 for docs and Flutter 3.47.4 for the demo. The docs are served at `/` and the demo at `/demo/`.
-
-Use the **Direct Upload** Pages project `flutter-operations-docs`, with `main` as the production branch. Do not connect Cloudflare's Git integration; GitHub Actions handles builds and uploads. Add `flutter-operations.saad-ardati.dev` through the project's **Custom domains** settings and follow Cloudflare's DNS instructions.
-
-| Content | Production URL |
-|---|---|
-| Documentation | `https://flutter-operations.saad-ardati.dev/` |
-| Interactive demo | `https://flutter-operations.saad-ardati.dev/demo/` |
-
-The combined upload directory is `docs/dist`. The project's `https://flutter-operations-docs.pages.dev` hostname also serves both the docs and demo. The separate `flutter-operations-example` Pages project is no longer needed for this workflow; leave it in place until the combined deployment is verified.
-
-Add two repository secrets under GitHub **Settings → Secrets and variables → Actions**.
-
-- `CLOUDFLARE_API_TOKEN` must have **Account → Cloudflare Pages → Edit** permission scoped to your Cloudflare account.
-- `CLOUDFLARE_ACCOUNT_ID` must contain that account's ID.
-
-Pushes to `main` deploy production. Same-repository pull requests deploy previews; fork pull requests only build and check the sites because they cannot access deployment secrets. You can also run **Deploy Pages** manually from GitHub Actions. Deployment jobs require the projects and secrets to exist.
-
-To build and deploy manually, run these commands from the repository root after setting up the projects. Wrangler will prompt for Cloudflare authentication if needed.
-
-```sh
-(cd docs && npm ci && npm run check && DOCS_SITE=https://flutter-operations.saad-ardati.dev npm run build)
-(cd example && flutter pub get && flutter build web --release --base-href=/demo/)
-mkdir -p docs/dist/demo
-cp -R example/build/web/. docs/dist/demo/
-npx wrangler pages deploy docs/dist --project-name=flutter-operations-docs --branch=main
-```
-
-`DOCS_SITE` sets the production URL for canonical links and the sitemap. Leave `DOCS_BASE` unset because the docs are served at the domain root. Flutter's `--base-href=/demo/` makes its assets resolve inside the demo directory.
-
-The docs build supplies its own `404.html`. The demo uses Flutter's default hash routing, so `/demo/` serves its index without a catch-all rewrite. Neither a Worker nor custom redirect rules are needed.
 
 ## The four states
 
