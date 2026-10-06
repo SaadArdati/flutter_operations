@@ -5,6 +5,8 @@
 
 <img src="https://raw.githubusercontent.com/SaadArdati/flutter_operations/main/screenshots/header.png" alt="flutter_operations: async UI with type-safe states" width="100%">
 
+[Documentation](https://flutter-operations.saad-ardati.dev) · [Live Demo](https://flutter-operations.saad-ardati.dev/demo)
+
 `flutter_operations` provides typed state and lifecycle management for asynchronous work in Flutter. It supports requests, commands, refreshes, and live subscriptions within your existing application architecture.
 
 Async interfaces need to represent loading, success, failure, and cached data. Their execution layer must also define how overlapping requests update state and how pending work behaves when its owner is disposed. Stream subscriptions require additional control over replacement, cancellation, and cleanup.
